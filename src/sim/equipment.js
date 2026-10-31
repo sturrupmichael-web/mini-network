@@ -2,8 +2,9 @@
  * Placing equipment from the inventory: switches and SD-WAN boxes.
  * (Upgrades and firewalls go on links: see links.js.)
  */
-import { closestPointOnPath, distanceToPolyline } from "./geometry.js";
-import { addLink, leasedNeeded, removeLink } from "./links.js";
+import { distanceToPolyline } from "./geometry.js";
+import { cellCenter, cellKey, cellOf, siteCells, snapToGrid } from "./grid.js";
+import { addLink, leasedForCells, removeLink } from "./links.js";
 import { addSite, deleteSite } from "./sites.js";
 
 /** Can a switch go at (x, y)? Returns null if fine, or a reason. */
@@ -11,6 +12,8 @@ export function switchSpotProblem(world, x, y, ignore = []) {
   const { map, config } = world;
   const margin = config.sites.edgeMargin / 2;
   if (x < margin || y < margin || x > map.width - margin || y > map.height - margin) return "off-map";
+  const here = siteCells(world).get(cellKey(cellOf(world, x, y)));
+  if (here && !ignore.includes(here.id)) return "too-close";
   for (const s of world.sites) {
     if (ignore.includes(s.id)) continue;
     if (Math.hypot(s.x - x, s.y - y) < config.switches.minSpacing) return "too-close";
@@ -26,11 +29,10 @@ export function switchSpotProblem(world, x, y, ignore = []) {
 export function placeSwitch(world, x, y) {
   if (world.over) return { ok: false, reason: "over" };
   if (world.inventory.switches <= 0) return { ok: false, reason: "no-switches" };
-  const rx = Math.round(x);
-  const ry = Math.round(y);
-  const problem = switchSpotProblem(world, rx, ry);
+  const spot = snapToGrid(world, x, y);
+  const problem = switchSpotProblem(world, spot.x, spot.y);
   if (problem) return { ok: false, reason: problem };
-  const site = addSite(world, "switch", rx, ry);
+  const site = addSite(world, "switch", spot.x, spot.y);
   world.inventory.switches--;
   world.events.push({ type: "switch-placed", siteId: site.id });
   return { ok: true, site };
@@ -38,30 +40,41 @@ export function placeSwitch(world, x, y) {
 
 /**
  * Player action: drop a switch onto a link A–B, splitting it into A–S and
- * S–B. The switch comes with the extra patch cable, and both halves keep
- * the old link's tier. Its firewall (if any) goes back to the inventory.
+ * S–B at the link's grid cell nearest (x, y). The halves follow the old
+ * route, so the cell the switch sits in comes back to the inventory. Both
+ * halves keep the old link's tier; its firewall (if any) is refunded.
  */
 export function placeSwitchOnLink(world, linkId, x, y) {
   if (world.over) return { ok: false, reason: "over" };
   const link = world.linkById.get(linkId);
   if (!link) return { ok: false, reason: "unknown-link" };
   if (world.inventory.switches <= 0) return { ok: false, reason: "no-switches" };
-  const { point } = closestPointOnPath(link.path, { x, y });
-  const rx = Math.round(point.x);
-  const ry = Math.round(point.y);
-  const problem = switchSpotProblem(world, rx, ry);
+  // The interior cell nearest the drop point.
+  let index = -1;
+  let best = Infinity;
+  for (let i = 1; i < link.cells.length - 1; i++) {
+    const c = cellCenter(world, link.cells[i]);
+    const d = Math.hypot(c.x - x, c.y - y);
+    if (d < best) {
+      best = d;
+      index = i;
+    }
+  }
+  if (index < 0) return { ok: false, reason: "too-close" };
+  const spot = cellCenter(world, link.cells[index]);
+  const problem = switchSpotProblem(world, spot.x, spot.y);
   if (problem) return { ok: false, reason: problem };
   const { a, b, line, tier } = link;
-  const spot = { x: rx, y: ry };
-  const leased = leasedNeeded(world, world.siteById.get(a), spot) + leasedNeeded(world, spot, world.siteById.get(b));
+  const firstCells = link.cells.slice(0, index + 1);
+  const secondCells = link.cells.slice(index);
+  const leased = leasedForCells(world, firstCells) + leasedForCells(world, secondCells);
   if (leased > world.inventory.leased + link.leased) return { ok: false, reason: "no-leased" };
   removeLink(world, linkId);
   world.inventory.upgrades -= tier; // the tier stays on the new halves
-  const site = addSite(world, "switch", rx, ry);
+  const site = addSite(world, "switch", spot.x, spot.y);
   world.inventory.switches--;
-  world.inventory.links++; // the free patch cable
-  const first = addLink(world, a, site.id, line);
-  const second = addLink(world, site.id, b, line);
+  const first = addLink(world, a, site.id, line, firstCells);
+  const second = addLink(world, site.id, b, line, secondCells);
   for (const half of [first, second]) if (half.ok) half.link.tier = tier;
   world.events.push({ type: "switch-placed", siteId: site.id });
   return { ok: true, site };

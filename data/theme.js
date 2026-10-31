@@ -9,6 +9,9 @@ export const THEME = {
     /** The white outline around every site, and a soft shadow behind it so it shows on a pale map. */
     siteOutline: "#ffffff",
     siteShadow: "rgba(43, 43, 43, 0.28)",
+    /** Dots marking the link grid, normally and while you draw. */
+    grid: "rgba(43, 43, 43, 0.09)",
+    gridActive: "rgba(43, 43, 43, 0.22)",
     /** Small details drawn on top of a site (switch ports, SD-WAN mark). */
     siteFill: "#ffffff",
     hubText: "#ffffff",
@@ -33,6 +36,8 @@ export const THEME = {
     boundary: "#26313b",
     siteOutline: "#ffffff",
     siteShadow: "rgba(0, 0, 0, 0.45)",
+    grid: "rgba(233, 230, 223, 0.07)",
+    gridActive: "rgba(233, 230, 223, 0.2)",
     siteFill: "#ffffff",
     hubText: "#ffffff",
     highlight: "rgba(233, 230, 223, 0.14)",
@@ -57,6 +62,7 @@ export const THEME = {
   lineColors: ["#e8483f", "#f2a516", "#2fa66a", "#2f80ed", "#9b51e0", "#e0569b", "#13a8b5"],
   sizes: {
     siteRadius: 13,
+    gridDot: 1.4,
     siteStroke: 3.5,
     linkWidth: 7,
     packetRadius: 3.6,

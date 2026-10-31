@@ -2,6 +2,7 @@
  * Sites: adding and removing them, capacity, destinations, and the
  * day/night clock that drives how busy they are.
  */
+import { snapToGrid } from "./grid.js";
 
 /** Is it night right now? (config.dayNight) */
 export function isNight(world) {
@@ -27,11 +28,13 @@ export function randomInterval(world, def) {
 export function addSite(world, type, x, y, label = null) {
   const def = world.data.sites[type];
   if (!def) throw new Error(`Unknown site type "${type}"`);
+  // Every site sits in the middle of a grid cell (grid.js).
+  const at = snapToGrid(world, x, y);
   const site = {
     id: world.nextId++,
     type,
-    x,
-    y,
+    x: at.x,
+    y: at.y,
     label,
     links: [],
     queue: [],

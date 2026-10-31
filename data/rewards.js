@@ -13,7 +13,7 @@
  *            capacity: extra queue capacity at every site (permanent).
  */
 export const REWARDS = [
-  { id: "links-2", label: "+2 links", detail: "Two more links for the inventory.", weight: 3, fromWeek: 1, grant: { links: 2 } },
+  { id: "links-12", label: "+12 links", detail: "Twelve more squares of link for the inventory.", weight: 3, fromWeek: 1, grant: { links: 12 } },
   {
     id: "fiber-switch",
     label: "Upgrade + switch",
@@ -31,25 +31,25 @@ export const REWARDS = [
     grant: { upgrades: 2 },
   },
   {
-    id: "links-1-capacity",
-    label: "+1 link, bigger buffers",
-    detail: "One link, and every site queues 2 more packets.",
+    id: "links-6-capacity",
+    label: "+6 links, bigger buffers",
+    detail: "Six squares of link, and every site queues 2 more packets.",
     weight: 2,
     fromWeek: 1,
-    grant: { links: 1, capacity: 2 },
+    grant: { links: 6, capacity: 2 },
   },
   {
     id: "leased-links",
-    label: "Leased line + link",
+    label: "Leased line + 6 links",
     detail: "Cross a carrier boundary with a new link.",
     weight: 2,
     fromWeek: 1,
-    grant: { leased: 1, links: 1 },
+    grant: { leased: 1, links: 6 },
   },
   { id: "sdwan-2", label: "2 SD-WAN boxes", detail: "Sites with one reroute around cuts instantly.", weight: 2, fromWeek: 2, grant: { sdwan: 2 } },
-  { id: "firewall-link", label: "Firewall + link", detail: "Another way out to the internet.", weight: 2, fromWeek: 2, grant: { firewalls: 1, links: 1 } },
+  { id: "firewall-link", label: "Firewall + 6 links", detail: "Another way out to the internet.", weight: 2, fromWeek: 2, grant: { firewalls: 1, links: 6 } },
   { id: "capacity-4", label: "Much bigger buffers", detail: "Every site queues 4 more packets before it overloads.", weight: 1, fromWeek: 2, grant: { capacity: 4 } },
-  { id: "links-3", label: "+3 links", detail: "A big order of cable came in.", weight: 1, fromWeek: 3, grant: { links: 3 } },
+  { id: "links-18", label: "+18 links", detail: "A big order of cable came in.", weight: 1, fromWeek: 3, grant: { links: 18 } },
 ];
 
 /** The grant keys the engine understands (checked by the validator). */

@@ -1,9 +1,12 @@
 /**
  * Map input for mouse, pen and touch (via Pointer Events).
  *
- * - Draw: press on a site and drag. Each site the pointer passes over is
- *   linked to the previous one, so one stroke can chain A → B → C. Starting
- *   from the end of a line continues that line (same colour).
+ * - Draw: press on a site and drag. The link follows the pointer square by
+ *   square across the grid (sim/grid.js); drag back over it to undo squares.
+ *   Reaching another site completes the link there, and the stroke carries
+ *   on from that site, so one stroke can chain A → B → C. Starting from the
+ *   end of a line continues that line (same colour). Letting go anywhere
+ *   but a site drops the unfinished part.
  * - Select: tap or click a link. A × button appears on it; tap that to
  *   remove the link (refunded). Right-click or Delete also removes.
  * - Reroute: press on a link and drag it onto another site: A–B becomes
@@ -12,11 +15,11 @@
  *   or empty map), or tap the item and then tap the target.
  * - Switches: tap a switch to select it; its × removes it.
  *
- * To make fast finger swipes reliable, every move is treated as a line
- * segment: any site the segment passes close to counts, in order, even if
- * no move event landed on it.
+ * Fast swipes still work: the path steps one square at a time towards
+ * wherever the pointer is now, so no squares are skipped.
  */
 import { distanceToPolyline } from "../sim/geometry.js";
+import { cellKey, cellOf, inGrid, sameCell, siteCells, stepToward } from "../sim/grid.js";
 import { screenToWorld, worldToScreen } from "../render/camera.js";
 import { removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemoveButtonPos } from "../render/renderer.js";
 
@@ -28,14 +31,13 @@ import { removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemoveButtonPos 
  * @param {object} opts.config       CONFIG.input
  * @param {object} opts.ui           Shared UI state the renderer reads.
  * @param {() => boolean} opts.canEdit  False while the game is over or a dialog is open.
- * @param {object} opts.actions      { connect(a, b, line), remove(linkId), reroute(linkId, siteId),
+ * @param {object} opts.actions      { connect(a, b, line, cells), remove(linkId), reroute(linkId, siteId),
  *                                    lineFor(siteId), removeSite(siteId), place(item, target) }
  * @param {object} opts.items        ITEMS from equipment.js (what each tray item targets).
  * @param {(reason: string) => void} [opts.onRefused]
  */
 export function attachPointerInput(canvas, opts) {
   const { getWorld, getCamera, config, ui, canEdit, actions, onRefused, items } = opts;
-  let last = null; // last pointer position (screen px) during a drawing drag
   let press = null; // a press on a link: { pointerId, linkId, start, touch }
   let lastPointerType = "mouse"; // contextmenu isn't a PointerEvent everywhere
 
@@ -166,23 +168,53 @@ export function attachPointerInput(canvas, opts) {
     window.addEventListener("pointercancel", up);
   }
 
-  /** Sites the segment p0→p1 passes within `radius` px of, in travel order. */
-  function sitesAlong(p0, p1, radius) {
+  /**
+   * Grow the drag's path one square at a time towards cell `target`.
+   * Backtracking over the path shortens it; reaching another site links to
+   * it and starts a new path there.
+   */
+  function extendPath(drag, target) {
     const world = getWorld();
-    const camera = getCamera();
-    const dx = p1.x - p0.x;
-    const dy = p1.y - p0.y;
-    const len2 = dx * dx + dy * dy;
-    const hits = [];
-    for (const site of world.sites) {
-      const s = worldToScreen(camera, site.x, site.y);
-      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((s.x - p0.x) * dx + (s.y - p0.y) * dy) / len2));
-      const d = Math.hypot(p0.x + dx * t - s.x, p0.y + dy * t - s.y);
-      const reach = Math.max(radius, siteRadiusPx(world, site, camera));
-      if (d <= reach) hits.push({ site, t });
+    const sites = siteCells(world);
+    for (let guard = 0; guard < 400; guard++) {
+      const lastCell = drag.cells.at(-1);
+      if (sameCell(lastCell, target)) return;
+      const next = stepToward(lastCell, target);
+      if (!inGrid(world, next)) return;
+      const back = drag.cells.findIndex((c) => sameCell(c, next));
+      if (back >= 0) {
+        drag.cells.length = back + 1; // undo squares
+        continue;
+      }
+      // Cut square corners into diagonals: if `next` also touches the square
+      // before the last one, the last one is just a kink, so drop it.
+      const touches = (c) => Math.max(Math.abs(c.cx - next.cx), Math.abs(c.cy - next.cy)) === 1;
+      while (drag.cells.length >= 2 && touches(drag.cells.at(-2))) drag.cells.pop();
+      const site = sites.get(cellKey(next));
+      if (site) {
+        const result = actions.connect(drag.fromSiteId, site.id, drag.line, [...drag.cells, next]);
+        if (result.ok || result.reason === "exists") {
+          drag.fromSiteId = site.id;
+          drag.cells = [next];
+          drag.refused = false;
+          continue;
+        }
+        if (!drag.refused) {
+          drag.refused = true;
+          refuse(result.reason);
+        }
+        return;
+      }
+      if (drag.cells.length > world.inventory.links) {
+        // Adding `next` would make this link cost drag.cells.length.
+        if (!drag.refused) {
+          drag.refused = true;
+          refuse("no-links");
+        }
+        return;
+      }
+      drag.cells.push(next);
     }
-    hits.sort((a, b) => a.t - b.t || a.site.id - b.site.id);
-    return hits.map((h) => h.site);
   }
 
   function refuse(reason) {
@@ -231,10 +263,11 @@ export function attachPointerInput(canvas, opts) {
         fromSiteId: site.id,
         line: actions.lineFor(site.id),
         pointerWorld: screenToWorld(getCamera(), p.x, p.y),
+        /** The squares drawn so far, from fromSiteId's square. */
+        cells: [cellOf(getWorld(), site.x, site.y)],
         refused: false,
       };
       ui.hoverSiteId = null;
-      last = p;
       return;
     }
 
@@ -285,18 +318,13 @@ export function attachPointerInput(canvas, opts) {
     const points = e.getCoalescedEvents?.().map(local) ?? [];
     if (points.length === 0) points.push(p);
     const radius = drag.touch ? config.touchConnectRadius : config.mouseConnectRadius;
+    const world = getWorld();
     for (const q of points) {
-      for (const site of sitesAlong(last, q, radius)) {
-        if (site.id === drag.fromSiteId) continue;
-        const result = actions.connect(drag.fromSiteId, site.id, drag.line);
-        if (result.ok || result.reason === "exists") {
-          drag.fromSiteId = site.id;
-        } else if (!drag.refused) {
-          drag.refused = true;
-          refuse(result.reason);
-        }
-      }
-      last = q;
+      // Near a site counts as on it (fingers are big); otherwise the square under the pointer.
+      const near = siteAt(q, radius);
+      const w = screenToWorld(getCamera(), q.x, q.y);
+      const target = near && near.id !== drag.fromSiteId ? cellOf(world, near.x, near.y) : cellOf(world, w.x, w.y);
+      extendPath(drag, target);
     }
     drag.pointerWorld = screenToWorld(getCamera(), p.x, p.y);
   }
@@ -322,7 +350,6 @@ export function attachPointerInput(canvas, opts) {
     if (!ui.drag || e.pointerId !== ui.drag.pointerId) return;
     const drag = ui.drag;
     ui.drag = null;
-    last = null;
     // A tap on a switch selects it (tap again to deselect).
     const world = getWorld();
     const site = world.siteById.get(drag.startSiteId);
@@ -375,7 +402,6 @@ export function attachPointerInput(canvas, opts) {
       ui.place = null;
       ui.armed = null;
       press = null;
-      last = null;
     },
   };
 }

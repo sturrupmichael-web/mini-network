@@ -86,7 +86,7 @@ export function createDebugPanel(root, opts) {
       <button type="button" data-debug="skip" data-seconds="week">1 week</button>
     </div>
     <div class="debug-row">
-      <button type="button" data-debug="grant-links">+5 links</button>
+      <button type="button" data-debug="grant-links">+30 links</button>
       <button type="button" data-debug="grant-items">+1 each item</button>
       <label><input type="checkbox" data-debug="outages" checked /> outages</label>
     </div>
@@ -126,7 +126,7 @@ export function createDebugPanel(root, opts) {
       note(`Skipped ${Math.round(r.seconds)}s${why}`);
     });
   }
-  q("grant-links").addEventListener("click", () => actions.grant({ links: 5 }));
+  q("grant-links").addEventListener("click", () => actions.grant({ links: 30 }));
   q("grant-items").addEventListener("click", () =>
     actions.grant({ upgrades: 1, switches: 1, firewalls: 1, sdwan: 1, leased: 1 }),
   );

@@ -2,7 +2,8 @@
  * Links: connecting sites, removing and rerouting links, bandwidth tiers,
  * firewalls, leased lines across carrier boundaries, and cuts.
  */
-import { octilinearPath, pathLength, segmentsIntersect } from "./geometry.js";
+import { pathLength, segmentsIntersect } from "./geometry.js";
+import { autoCells, cellCost, cellsToPath, pathProblem } from "./grid.js";
 
 /** Find the link joining two sites, if any. */
 export function findLink(world, aId, bId) {
@@ -29,9 +30,19 @@ export function boundaryCrossings(world, path) {
   return crossings;
 }
 
-/** Leased lines a new link between these two sites would need. */
-export function leasedNeeded(world, a, b) {
-  return boundaryCrossings(world, octilinearPath(a, b));
+/** Leased lines a chain of cells would need. */
+export function leasedForCells(world, cells) {
+  return boundaryCrossings(world, cellsToPath(world, cells));
+}
+
+/**
+ * What an automatic link between two sites (or spots) would take:
+ * { cells, cost, leased }, or null if there's no way through.
+ */
+export function plannedLink(world, a, b) {
+  const cells = autoCells(world, a, b);
+  if (!cells) return null;
+  return { cells, cost: cellCost(cells), leased: leasedForCells(world, cells) };
 }
 
 export function linkBandwidth(world, link) {
@@ -45,20 +56,29 @@ export function isBlocked(world, link) {
 }
 
 /**
- * Player action: connect two sites. Returns { ok: true, link } or
- * { ok: false, reason } where reason is "same-site" | "unknown-site" |
- * "exists" | "no-links" | "no-leased" | "over".
+ * Player action: connect two sites along a chain of grid cells (see
+ * grid.js). Each cell between the two sites uses one link from the
+ * inventory. Returns { ok: true, link } or { ok: false, reason } where
+ * reason is "same-site" | "unknown-site" | "exists" | "no-links" |
+ * "no-leased" | "over" | "bad-path" | "off-map" | "through-site" | "no-way".
  * @param {number} line  Which drawn "line" (colour) the link belongs to.
+ * @param {{cx: number, cy: number}[]} [cells]  The route the player drew,
+ *        from a's cell to b's. Left out, the straightest clear route is used.
  */
-export function addLink(world, aId, bId, line = 0) {
+export function addLink(world, aId, bId, line = 0, cells = null) {
   if (world.over) return { ok: false, reason: "over" };
   if (aId === bId) return { ok: false, reason: "same-site" };
   const a = world.siteById.get(aId);
   const b = world.siteById.get(bId);
   if (!a || !b) return { ok: false, reason: "unknown-site" };
   if (findLink(world, aId, bId)) return { ok: false, reason: "exists" };
-  if (world.inventory.links <= 0) return { ok: false, reason: "no-links" };
-  const path = octilinearPath(a, b);
+  const route = cells ?? autoCells(world, a, b);
+  if (!route) return { ok: false, reason: "no-way" };
+  const problem = pathProblem(world, route, a, b);
+  if (problem) return { ok: false, reason: problem };
+  const cost = cellCost(route);
+  if (cost > world.inventory.links) return { ok: false, reason: "no-links" };
+  const path = cellsToPath(world, route);
   const leased = boundaryCrossings(world, path);
   if (leased > world.inventory.leased) return { ok: false, reason: "no-leased" };
 
@@ -67,6 +87,10 @@ export function addLink(world, aId, bId, line = 0) {
     a: aId,
     b: bId,
     line,
+    /** The grid cells it runs through, end site to end site. */
+    cells: route.map((c) => ({ cx: c.cx, cy: c.cy })),
+    /** Links from the inventory it uses (the cells between its ends). */
+    cost,
     path,
     length: pathLength(path),
     /** Index into LINK_TIERS. */
@@ -84,7 +108,7 @@ export function addLink(world, aId, bId, line = 0) {
   world.linkById.set(link.id, link);
   a.links.push(link.id);
   b.links.push(link.id);
-  world.inventory.links--;
+  world.inventory.links -= cost;
   world.inventory.leased -= leased;
   world.routing.dirty = true;
   world.events.push({ type: "link-added", linkId: link.id });
@@ -119,7 +143,7 @@ export function removeLink(world, linkId) {
   }
   world.links = world.links.filter((l) => l !== link);
   world.linkById.delete(linkId);
-  world.inventory.links++;
+  world.inventory.links += link.cost;
   world.inventory.upgrades += link.tier;
   world.inventory.firewalls += link.firewall ? 1 : 0;
   world.inventory.leased += link.leased;
@@ -129,9 +153,9 @@ export function removeLink(world, linkId) {
 }
 
 /**
- * Player action: reroute link A–B through site C, making A–C and C–B.
- * Links that already exist are reused. The old link's equipment is
- * refunded first, so this needs at most one more link.
+ * Player action: reroute link A–B through site C, making A–C and C–B
+ * along the straightest clear routes. Links that already exist are reused.
+ * The old link is refunded first, then the new legs are paid for.
  */
 export function rerouteLink(world, linkId, viaId) {
   if (world.over) return { ok: false, reason: "over" };
@@ -141,16 +165,22 @@ export function rerouteLink(world, linkId, viaId) {
   if (!via) return { ok: false, reason: "unknown-site" };
   if (viaId === link.a || viaId === link.b) return { ok: false, reason: "same-site" };
   const { a, b, line } = link;
-  const legs = [
+  const legs = [];
+  for (const [x, y] of [
     [a, viaId],
     [viaId, b],
-  ].filter(([x, y]) => !findLink(world, x, y));
-  const needLinks = legs.length;
-  const needLeased = legs.reduce((n, [x, y]) => n + leasedNeeded(world, world.siteById.get(x), world.siteById.get(y)), 0);
-  if (needLinks > world.inventory.links + 1) return { ok: false, reason: "no-links" };
+  ]) {
+    if (findLink(world, x, y)) continue;
+    const plan = plannedLink(world, world.siteById.get(x), world.siteById.get(y));
+    if (!plan) return { ok: false, reason: "no-way" };
+    legs.push({ x, y, ...plan });
+  }
+  const needLinks = legs.reduce((n, l) => n + l.cost, 0);
+  const needLeased = legs.reduce((n, l) => n + l.leased, 0);
+  if (needLinks > world.inventory.links + link.cost) return { ok: false, reason: "no-links" };
   if (needLeased > world.inventory.leased + link.leased) return { ok: false, reason: "no-leased" };
   removeLink(world, linkId);
-  for (const [x, y] of legs) addLink(world, x, y, line);
+  for (const leg of legs) addLink(world, leg.x, leg.y, line, leg.cells);
   return { ok: true };
 }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { CONFIG } from "../data/config.js";
 import { distanceToPolyline } from "../src/sim/geometry.js";
 import { chooseReward, clock, findSiteSpot } from "../src/sim/progression.js";
+import { plannedLink } from "../src/sim/links.js";
 import { addLink, findLink, isHalted, removeLink, rerouteLink, siteCapacity, snapshot, step } from "../src/sim/world.js";
 import { configWith, customMap, makeWorld } from "./helpers.mjs";
 
@@ -177,7 +178,7 @@ export const tests = [
     runUntil(world, (w) => w.packets.some((p) => p.linkId === link.id));
     const travelling = world.packets.filter((p) => p.linkId === link.id).map((p) => p.id);
     assert.ok(removeLink(world, link.id).ok);
-    assert.equal(world.inventory.links, before + 1);
+    assert.equal(world.inventory.links, before + link.cost, "every square comes back");
     assert.equal(findLink(world, office.id, hub.id), null);
     assert.equal(office.links.length, 0);
     for (const id of travelling) assert.ok(office.queue.includes(id), "packet is back in the queue");
@@ -195,7 +196,8 @@ export const tests = [
     assert.ok(findLink(world, a.id, b.id));
     assert.ok(findLink(world, b.id, hub.id));
     assert.equal(findLink(world, a.id, b.id).line, 3, "keeps the line colour");
-    assert.equal(world.inventory.links, before - 1, "costs one extra link");
+    const legs = findLink(world, a.id, b.id).cost + findLink(world, b.id, hub.id).cost;
+    assert.equal(world.inventory.links, before + link.cost - legs, "the old link is refunded, the legs paid for");
     assert.equal(rerouteLink(world, findLink(world, a.id, b.id).id, a.id).reason, "same-site");
   }],
   ["rerouting reuses links that already exist", () => {
@@ -205,12 +207,14 @@ export const tests = [
     const link = addLink(world, a.id, hub.id).link;
     const before = world.inventory.links;
     assert.ok(rerouteLink(world, link.id, b.id).ok);
-    assert.equal(world.inventory.links, before, "one refunded, one used");
+    assert.equal(world.inventory.links, before + link.cost - findLink(world, a.id, b.id).cost, "one refunded, one used");
   }],
   ["rerouting with no links left is refused and changes nothing", () => {
-    const world = makeWorld({ config: noGrowth({ links: { startingCount: 1, perDay: 0 } }) });
+    const world = makeWorld({ config: noGrowth({ links: { startingCount: 0, perDay: 0 } }) });
     const [hub, a, b] = world.sites;
+    world.inventory.links = plannedLink(world, a, hub).cost;
     const link = addLink(world, a.id, hub.id).link;
+    assert.equal(world.inventory.links, 0);
     assert.equal(rerouteLink(world, link.id, b.id).reason, "no-links");
     assert.ok(findLink(world, a.id, hub.id));
   }],

@@ -105,7 +105,10 @@ export const tests = [
     const other = start === "dark" ? "light" : "dark";
     await btn.click();
     assert(JSON.stringify(await theme()) === JSON.stringify([other, other]), "switched");
-    assert((await btn.getAttribute("aria-label")) === (other === "dark" ? "Light mode" : "Dark mode"), "button label");
+    await page.waitForFunction(
+      (label) => document.querySelector('[data-hud="theme"]').getAttribute("aria-label") === label,
+      other === "dark" ? "Light mode" : "Dark mode",
+    );
     assert((await page.evaluate(() => window.miniNetwork.settings.theme)) === other, "saved");
     await btn.click();
     assert((await theme())[0] === start, "and back");

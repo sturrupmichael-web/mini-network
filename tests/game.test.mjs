@@ -46,7 +46,8 @@ export const tests = [
     assert((await linkCount(page)) === 2, `two links (got ${await linkCount(page)})`);
     const inv = await page.evaluate(() => window.miniNetwork.world.inventory.links);
     const start = await page.evaluate(() => window.miniNetwork.world.config.links.startingCount);
-    assert(inv === start - 2, "inventory went down by two");
+    const used = await page.evaluate(() => window.miniNetwork.world.links.reduce((n, l) => n + l.cost, 0));
+    assert(used > 2 && inv === start - used, `inventory went down by the squares used (${used})`);
   }],
   ["dragging from empty space draws nothing", async (t) => {
     const page = await t.open();

@@ -19,6 +19,7 @@ data/ (content + balance)       src/
                   │   │            events.js    event schedule and effects
                   │   │            progression.js  clock, new sites, traffic growth, rewards
                   │   │            geometry.js  45°/90° metro paths, points along a path
+                  │   │            grid.js      the link grid: squares, routes, costs
                   │   │          loop.js      fixed-timestep loop: pause, 1×/2×
                   │   │          rng.js       seeded RNG (all gameplay randomness)
                   │   │          storage.js   localStorage wrapper ("miniNetwork:" keys)
@@ -193,12 +194,26 @@ neighbouring link with the lowest
 
 It avoids going straight back where it came from unless that's the only way.
 
-## Links
+## Links and the grid
 
-A link joins two sites with a metro-style path: one straight run then one
-45° diagonal (`geometry.octilinearPath`). Each direction has its own
-bandwidth: after sending a packet of size `s`, that direction is busy for
-`s / bandwidth` seconds. Each drag gesture gets the next line colour.
+The map is a grid of `grid.cellSize` squares (`sim/grid.js`). Every site
+sits in the middle of a square. A link is a chain of touching squares
+(sideways, up/down or diagonal) from one site's square to another's, never
+through a third site; each square between the two ends uses one link from
+the inventory, and removing the link refunds them all. The drawn polyline
+(`link.path`) runs through the square centres with straight runs merged,
+so lines are 0°/45°/90°.
+
+Players draw the route: the pointer input steps one square at a time
+towards the pointer, cuts square kinks into diagonals, and undoes squares
+when you drag back over the path. Reaching a site calls
+`addLink(world, a, b, line, cells)`. Without `cells` (rerouting, splitting
+with a switch, tests, the bot) `autoCells` uses the straight route if it's
+clear, else a breadth-first search around sites.
+
+Each direction has its own bandwidth: after sending a packet of size `s`,
+that direction is busy for `s / bandwidth` seconds. Each drag gesture gets
+the next line colour.
 
 ## Config schema (data/)
 

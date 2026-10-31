@@ -40,7 +40,11 @@ same network. Or open the deployed site (below).
 
 ### Controls
 
-- Drag from a site to another to link them; keep dragging to chain more.
+- Drag from a site to another to link them. The link follows your finger
+  square by square across the dotted grid, so you can steer it around
+  things; drag back over it to undo squares. Each square between the two
+  sites uses one link (the counter shows how many). Keep dragging past a
+  site to chain on to the next one.
 - Tap or click a link, then its × to remove it (you get the link back).
   Right-click or Delete also removes.
 - Drag a link onto another site to reroute it through that site.
@@ -90,7 +94,8 @@ Every field is commented in the file. The ones that matter most:
 
 | Knob | What it does |
 | --- | --- |
-| `links.startingCount`, `links.perDay` | How many links you start with and get each day |
+| `links.startingCount`, `links.perDay` | How many links (grid squares of link) you start with and get each day |
+| `grid.cellSize` | Size of one grid square; smaller squares mean finer routes and more links per connection |
 | `links.bandwidth`, `links.packetSpeed` | How much a link carries and how fast packets move |
 | `inventory` | Starting equipment (upgrades, switches, firewalls, SD-WAN, leased lines) |
 | `spawn.packetIntervalScale` | Global traffic rate: lower is busier |

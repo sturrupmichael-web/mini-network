@@ -29,8 +29,8 @@ export const LINK_TIERS = [
 export const ITEMS = {
   links: {
     name: "Links",
-    hint: "Drag between sites to connect them.",
-    tip: "Drag from one site to another to connect them. Removing a link gives it back. You get one more each day.",
+    hint: "Drag from a site along the grid to another site.",
+    tip: "Drag from one site to another; the link follows your finger square by square, so you can steer around things. Each grid square uses one. Removing a link gives them all back, and more arrive each day.",
     target: null,
   },
   upgrades: {
@@ -42,7 +42,7 @@ export const ITEMS = {
   switches: {
     name: "Switch",
     hint: "Drop on the map, or on a link to split it.",
-    tip: "A junction for your links. Drop it on empty map to start a hub, or on a link to split it in two so more sites can join.",
+    tip: "A junction for your links. Drop it on empty map to start a hub, or on a link to split it in two so more sites can join (the square it sits on comes back).",
     target: "map",
   },
   firewalls: {

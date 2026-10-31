@@ -39,7 +39,9 @@ import { createTitle } from "./ui/title.js";
 const CONFIG = GAME_DATA.config;
 
 const REFUSED_TEXT = {
-  "no-links": "Out of links. One arrives each day.",
+  "no-links": "Not enough links for that. More arrive each day.",
+  "through-site": "Links can't run through another site.",
+  "no-way": "There's no clear way through.",
   "no-leased": "Crossing a carrier boundary needs a leased line.",
   "no-upgrades": "No bandwidth upgrades left.",
   "max-tier": "That link is already dark fiber.",
@@ -362,7 +364,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     ui,
     canEdit: () => Boolean(run) && !isHalted(world) && !title.visible,
     actions: {
-      connect: (a, b, line) => addLink(world, a, b, line),
+      connect: (a, b, line, cells) => addLink(world, a, b, line, cells),
       remove: (linkId) => removeLink(world, linkId),
       reroute: (linkId, siteId) => rerouteLink(world, linkId, siteId),
       removeSite: (siteId) => removeSwitch(world, siteId),
@@ -436,6 +438,8 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     ui,
     audio,
     debugPanel,
+    /** Screen position (CSS px, relative to the canvas) of a world point. */
+    worldToScreen: (x, y) => worldToScreen(camera, x, y),
     /** Screen position (CSS px, relative to the canvas) of a site. */
     sitePosition(id) {
       const site = world.siteById.get(id);

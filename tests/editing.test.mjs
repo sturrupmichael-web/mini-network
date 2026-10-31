@@ -35,13 +35,15 @@ export const tests = [
     await mouseDrag(page, [await sitePos(page, offices[0].id), await sitePos(page, hub.id)]);
     const before = await state(page);
     assert(before.links.length === 1, "link drawn");
+    const cost = await page.evaluate(() => window.miniNetwork.world.links[0].cost);
+    assert(cost > 0, "a link costs its squares");
     const mid = await midpoint(page, before.links[0].id);
     await page.mouse.click(mid.x, mid.y);
     assert((await page.evaluate(() => window.miniNetwork.ui.selectedLinkId)) === before.links[0].id, "selected");
     await page.mouse.click(mid.x, mid.y); // the × sits at the midpoint
     const after = await state(page);
     assert(after.links.length === 0, "removed");
-    assert(after.inventory === before.inventory + 1, "refunded");
+    assert(after.inventory === before.inventory + cost, "refunded");
   }],
   ["right-click removes a link", async (t) => {
     const page = await t.open();

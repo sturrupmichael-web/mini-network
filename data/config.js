@@ -31,13 +31,17 @@ export const CONFIG = {
   },
 
   links: {
-    /** Links in the inventory at the start of a game. */
-    startingCount: 10,
+    /**
+     * Links in the inventory at the start of a game. One link covers one
+     * grid square (grid.cellSize), so a link between two sites uses as many
+     * as the squares it passes through.
+     */
+    startingCount: 45,
     /**
      * Links delivered at the start of each new day. New sites keep
      * arriving faster than this, so links get scarcer as the game goes on.
      */
-    perDay: 1,
+    perDay: 4,
     /**
      * Base bandwidth: how many size-1 packets per second a Copper link can
      * start sending in each direction. A packet of size 2 uses twice the
@@ -131,6 +135,15 @@ export const CONFIG = {
      * so you have time to connect it.
      */
     newDestinationDelay: 20,
+  },
+
+  grid: {
+    /**
+     * Size of one grid square, in world units. Sites sit in the middle of a
+     * square, and every square a link passes through between its two sites
+     * uses one link from the inventory.
+     */
+    cellSize: 30,
   },
 
   sites: {

@@ -189,9 +189,12 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
       if (!ok) err(`${at}: "${t}" has no traffic with a destination on the map on day 0`);
     }
     const spacing = config?.sites?.minSpacing ?? 0;
+    // Sites snap to the middle of a grid square, so check where they end up.
+    const cell = m.tuning?.grid?.cellSize ?? config?.grid?.cellSize ?? 1;
+    const snap = (v) => (Math.floor(v / cell) + 0.5) * cell;
     for (let a = 0; a < m.start.length; a++) {
       for (let b = a + 1; b < m.start.length; b++) {
-        const d = Math.hypot(m.start[a].x - m.start[b].x, m.start[a].y - m.start[b].y);
+        const d = Math.hypot(snap(m.start[a].x) - snap(m.start[b].x), snap(m.start[a].y) - snap(m.start[b].y));
         if (d < spacing) err(`${at}.start[${a}] and [${b}] are closer than config.sites.minSpacing`);
       }
     }

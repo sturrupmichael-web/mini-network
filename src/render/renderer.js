@@ -2,7 +2,8 @@
  * Draws the world onto the canvas. Reads simulation state, never changes it.
  */
 import { THEME } from "../../data/theme.js";
-import { octilinearPath, pointAlong } from "../sim/geometry.js";
+import { pointAlong } from "../sim/geometry.js";
+import { cellCenter, cellOf, cellsToPath, gridSize, straightCells } from "../sim/grid.js";
 import { isBlocked } from "../sim/links.js";
 import { worldToScreen } from "./camera.js";
 
@@ -66,6 +67,7 @@ export function render(ctx, view, world, camera, ui, now = 0) {
   ctx.lineJoin = "round";
 
   drawBoundaries(ctx, world, camera, colors, k);
+  drawGrid(ctx, world, camera, colors, k, Boolean(ui.drag));
   drawLinks(ctx, world, camera, colors, k, ui, now);
   if (ui.drag) drawPreview(ctx, world, camera, ui.drag, k);
   if (ui.reroute) drawReroute(ctx, world, camera, ui.reroute, k);
@@ -99,6 +101,23 @@ function strokePath(ctx, pts) {
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.stroke();
+}
+
+/** A faint dot in the middle of every grid square (stronger while drawing). */
+function drawGrid(ctx, world, camera, colors, k, drawing) {
+  const { cols, rows } = gridSize(world);
+  ctx.fillStyle = drawing ? colors.gridActive : colors.grid;
+  const r = THEME.sizes.gridDot * k;
+  ctx.beginPath();
+  for (let cx = 0; cx < cols; cx++) {
+    for (let cy = 0; cy < rows; cy++) {
+      const c = cellCenter(world, { cx, cy });
+      const p = worldToScreen(camera, c.x, c.y);
+      ctx.moveTo(p.x + r, p.y);
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    }
+  }
+  ctx.fill();
 }
 
 function drawBoundaries(ctx, world, camera, colors, k) {
@@ -254,15 +273,39 @@ function drawDropTarget(ctx, world, camera, colors, target, k) {
   }
 }
 
+/** The link being drawn: its squares so far, and how many links it uses. */
 function drawPreview(ctx, world, camera, drag, k) {
   const from = world.siteById.get(drag.fromSiteId);
-  if (!from || !drag.pointerWorld) return;
-  const pts = toScreenPath(camera, octilinearPath(from, drag.pointerWorld));
-  ctx.globalAlpha = 0.55;
-  ctx.strokeStyle = lineColor(drag.line);
+  if (!from || !drag.pointerWorld || !drag.cells) return;
+  const color = lineColor(drag.line);
+  const pts = toScreenPath(camera, cellsToPath(world, drag.cells));
+  ctx.strokeStyle = color;
   ctx.lineWidth = THEME.sizes.linkWidth * k;
-  strokePath(ctx, pts);
+  ctx.globalAlpha = 0.7;
+  if (pts.length > 1) strokePath(ctx, pts);
+  // A thin guide from the end of the path to the pointer.
+  const end = pts.at(-1);
+  const pointer = worldToScreen(camera, drag.pointerWorld.x, drag.pointerWorld.y);
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 2 * k;
+  strokePath(ctx, [end, pointer]);
   ctx.globalAlpha = 1;
+  // Squares used so far (the cells after the starting site).
+  const used = drag.cells.length - 1;
+  if (used > 0) {
+    const r = 11 * k;
+    const bx = end.x + 16 * k;
+    const by = end.y - 16 * k;
+    ctx.fillStyle = drag.cells.length > world.inventory.links ? "#e8483f" : color;
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `700 ${Math.round(11 * k)}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(used), bx, by + 0.5);
+  }
 }
 
 function drawReroute(ctx, world, camera, reroute, k) {
@@ -270,12 +313,12 @@ function drawReroute(ctx, world, camera, reroute, k) {
   if (!link || !reroute.pointerWorld) return;
   const a = world.siteById.get(link.a);
   const b = world.siteById.get(link.b);
-  const p = reroute.pointerWorld;
+  const p = cellOf(world, reroute.pointerWorld.x, reroute.pointerWorld.y);
   ctx.globalAlpha = 0.6;
   ctx.strokeStyle = lineColor(link.line);
   ctx.lineWidth = THEME.sizes.linkWidth * k;
-  strokePath(ctx, toScreenPath(camera, octilinearPath(a, p)));
-  strokePath(ctx, toScreenPath(camera, octilinearPath(p, b)));
+  strokePath(ctx, toScreenPath(camera, cellsToPath(world, straightCells(cellOf(world, a.x, a.y), p))));
+  strokePath(ctx, toScreenPath(camera, cellsToPath(world, straightCells(p, cellOf(world, b.x, b.y)))));
   ctx.globalAlpha = 1;
 }
 

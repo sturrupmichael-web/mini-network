@@ -97,15 +97,19 @@ export const tests = [
     const link = addLink(world, a.id, hub.id).link;
     upgradeLink(world, link.id);
     const links = world.inventory.links;
-    const mid = link.path[1] ?? { x: (a.x + hub.x) / 2, y: (a.y + hub.y) / 2 };
-    const r = placeSwitchOnLink(world, link.id, mid.x + 3, mid.y + 3);
+    const mid = link.path[0];
+    const half = link.cells[Math.floor(link.cells.length / 2)];
+    const at = { x: (half.cx + 0.5) * world.config.grid.cellSize, y: (half.cy + 0.5) * world.config.grid.cellSize };
+    assert.ok(mid, "has a path");
+    const r = placeSwitchOnLink(world, link.id, at.x + 3, at.y + 3);
     assert.ok(r.ok, r.reason);
     assert.equal(findLink(world, a.id, hub.id), null);
     const s1 = findLink(world, a.id, r.site.id);
     const s2 = findLink(world, r.site.id, hub.id);
     assert.ok(s1 && s2, "split into two");
     assert.ok(s1.tier === 1 && s2.tier === 1, "tier kept");
-    assert.equal(world.inventory.links, links, "the split is free");
+    assert.equal(world.inventory.links, links + 1, "the square the switch sits on comes back");
+    assert.equal(s1.cost + s2.cost, link.cost - 1);
     assert.equal(world.inventory.upgrades, 1);
     run(world, 30);
     assert.ok(world.stats.delivered > 0, "traffic flows through the switch");
@@ -113,7 +117,7 @@ export const tests = [
     const linksBefore = world.inventory.links;
     assert.ok(removeSwitch(world, r.site.id).ok);
     assert.equal(world.inventory.switches, switches + 1);
-    assert.equal(world.inventory.links, linksBefore + 2);
+    assert.equal(world.inventory.links, linksBefore + s1.cost + s2.cost);
     assert.ok(!world.siteById.has(r.site.id));
     assert.equal(removeSwitch(world, hub.id).reason, "not-a-switch");
   }],

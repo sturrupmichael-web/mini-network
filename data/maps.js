@@ -95,7 +95,7 @@ export const MAPS = [
     tuning: {
       sites: { minSpacing: 95, edgeMargin: 45, boundaryClearance: 40 },
       growth: { startRadius: 300, radiusGrowthPerDay: 45 },
-      links: { startingCount: 9, perDay: 1, bandwidth: 2, packetSpeed: 120 },
+      links: { startingCount: 40, perDay: 4, bandwidth: 2, packetSpeed: 120 },
     },
   },
 ];

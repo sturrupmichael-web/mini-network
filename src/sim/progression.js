@@ -4,6 +4,7 @@
  */
 import { scheduleDay } from "./events.js";
 import { distanceToPolyline } from "./geometry.js";
+import { snapToGrid } from "./grid.js";
 import { addSite, hubSite } from "./sites.js";
 
 /** Day number (0-based), week (1-based), day of week (0 = Mon) and fraction through the day. */
@@ -70,8 +71,8 @@ export function findSpot(world, { center, radius }) {
   const { edgeMargin, minSpacing, boundaryClearance, linkClearance = 0 } = config.sites;
   const boundaries = (map.boundaries ?? []).map((b) => b.map(([x, y]) => ({ x, y })));
   for (let i = 0; i < config.growth.attempts; i++) {
-    const x = Math.round(world.rng.range(edgeMargin, map.width - edgeMargin));
-    const y = Math.round(world.rng.range(edgeMargin, map.height - edgeMargin));
+    const { x, y } = snapToGrid(world, world.rng.range(edgeMargin, map.width - edgeMargin), world.rng.range(edgeMargin, map.height - edgeMargin));
+    if (x < edgeMargin || y < edgeMargin || x > map.width - edgeMargin || y > map.height - edgeMargin) continue;
     if (Math.hypot(x - center.x, y - center.y) > radius) continue;
     if (world.sites.some((s) => Math.hypot(s.x - x, s.y - y) < minSpacing)) continue;
     const p = { x, y };

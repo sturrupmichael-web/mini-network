@@ -4,6 +4,7 @@ import { octilinearPath, pathLength, pointAlong } from "../src/sim/geometry.js";
 import { nextHop, computeRoutes } from "../src/sim/routing.js";
 import { addLink, findLink, snapshot, step } from "../src/sim/world.js";
 import { configWith, customMap, makeWorld } from "./helpers.mjs";
+import { plannedLink } from "../src/sim/links.js";
 
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) step(world);
@@ -117,8 +118,9 @@ export const tests = [
     assert.ok(waiting > 5, `expected a backlog, got ${waiting}`);
   }],
   ["links use up inventory and refuse bad requests", () => {
-    const world = makeWorld({ config: configWith({ links: { startingCount: 2 } }) });
+    const world = makeWorld();
     const [h, a, b, c] = world.sites;
+    world.inventory.links = plannedLink(world, a, h).cost + plannedLink(world, b, h).cost;
     assert.equal(addLink(world, a.id, a.id).reason, "same-site");
     assert.equal(addLink(world, a.id, 9999).reason, "unknown-site");
     assert.ok(addLink(world, a.id, h.id).ok);

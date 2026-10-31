@@ -30,7 +30,7 @@ export const tests = [
     assert(await page.evaluate(() => window.miniNetwork.world.sites.at(-1).type === "retail"), "retail");
 
     await page.click('[data-debug="grant-links"]');
-    assert((await g()).links === before.links + 5, "links granted");
+    assert((await g()).links === before.links + 30, "links granted");
 
     // An all-hands needs linked sites to send to; with none it politely refuses.
     await page.selectOption('[data-debug="event"]', "all-hands");
