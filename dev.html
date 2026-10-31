@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta name="theme-color" content="#f6f4ef" />
+    <meta name="description" content="Mini Network: draw links between sites and keep the company's traffic flowing." />
+    <title>Mini Network</title>
+    <link rel="stylesheet" href="styles/main.css" />
+  </head>
+  <body>
+    <main class="app">
+      <canvas id="game" aria-label="Network map. Drag from one site to another to link them."></canvas>
+      <div id="hud" class="hud"></div>
+    </main>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
