@@ -245,8 +245,11 @@ export const CONFIG = {
   view: {
     /** Empty space kept around the map, in px. */
     padding: 28,
-    /** How fast the camera zooms out as the map opens up (higher is faster). */
-    zoomSpeed: 1.6,
+    /**
+     * How fast the camera pans out as the map opens up (higher is faster).
+     * It eases in and out; at 0.9 a move takes about four seconds.
+     */
+    zoomSpeed: 0.9,
     /** Space reserved for the HUD bar at the top and the tray at the bottom, in px. */
     hudTop: 56,
     hudBottom: 72,

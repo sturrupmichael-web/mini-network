@@ -117,23 +117,35 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
   const fullMap = () => ({ x: 0, y: 0, width: map.width, height: map.height });
   function settleCamera() {
     shownView = run ? { ...world.view } : fullMap();
+    for (const k in viewVelocity) viewVelocity[k] = 0;
+    ui.shownView = shownView;
     fit();
   }
+  /**
+   * A critically damped spring per edge: the camera starts moving gently,
+   * glides, and settles without overshoot, even if the target changes
+   * mid-move (no sudden jumps in speed).
+   */
+  const viewVelocity = { x: 0, y: 0, width: 0, height: 0 };
   function easeCamera(now) {
     const target = run ? world.view : fullMap();
-    const dt = lastFrame ? Math.min(0.1, now - lastFrame) : 0;
+    const dt = lastFrame ? Math.min(0.05, now - lastFrame) : 0;
     lastFrame = now;
     if (!shownView) shownView = { ...target };
-    const t = 1 - Math.exp(-dt * CONFIG.view.zoomSpeed);
+    const w = CONFIG.view.zoomSpeed;
     let moved = false;
     for (const k of ["x", "y", "width", "height"]) {
       const d = target[k] - shownView[k];
-      if (Math.abs(d) < 0.05) shownView[k] = target[k];
-      else {
-        shownView[k] += d * t;
-        moved = true;
+      if (Math.abs(d) < 0.05 && Math.abs(viewVelocity[k]) < 0.05) {
+        shownView[k] = target[k];
+        viewVelocity[k] = 0;
+        continue;
       }
+      viewVelocity[k] += (w * w * d - 2 * w * viewVelocity[k]) * dt;
+      shownView[k] += viewVelocity[k] * dt;
+      moved = true;
     }
+    ui.shownView = shownView;
     if (moved) fit();
   }
 

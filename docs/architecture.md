@@ -208,9 +208,10 @@ It avoids going straight back where it came from unless that's the only way.
   and never shrinks. New sites, links and switches stay inside it, except
   acquisitions, which can land in a far corner and pull the area open.
 - **Camera**: `fitCamera(…, rect)` fits a part of the map; whether it
-  turns 90° depends only on the whole map. `game.js` eases the shown rect
-  towards `world.view` each frame (`view.zoomSpeed`), so it zooms out
-  smoothly; `settleCamera()` jumps there (tests, screenshots). The renderer
+  turns 90° depends only on the whole map. `game.js` moves the shown rect
+  towards `world.view` with a critically damped spring (`view.zoomSpeed`),
+  so it starts gently, glides and settles without a bounce; the shading and
+  grid follow the shown rect; `settleCamera()` jumps there (tests, screenshots). The renderer
   shades everything outside `world.view`.
 
 ## Links and the grid

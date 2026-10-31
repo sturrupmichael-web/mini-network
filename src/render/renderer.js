@@ -3,7 +3,7 @@
  */
 import { THEME } from "../../data/theme.js";
 import { pointAlong } from "../sim/geometry.js";
-import { cellCenter, cellOf, cellsToPath, gridSize, inView, straightCells } from "../sim/grid.js";
+import { cellCenter, cellOf, cellsToPath, gridSize, straightCells } from "../sim/grid.js";
 import { isBlocked } from "../sim/links.js";
 import { worldToScreen } from "./camera.js";
 
@@ -68,8 +68,9 @@ export function render(ctx, view, world, camera, ui, now = 0) {
 
   drawTerrain(ctx, world, camera, colors);
   drawBoundaries(ctx, world, camera, colors, k);
-  drawClosed(ctx, view, world, camera, colors);
-  drawGrid(ctx, world, camera, colors, k, Boolean(ui.drag));
+  // The shaded edge follows the camera's eased view, so it glides open too.
+  drawClosed(ctx, view, world, camera, colors, ui.shownView);
+  drawGrid(ctx, world, camera, colors, k, Boolean(ui.drag), ui.shownView);
   drawLinks(ctx, world, camera, colors, k, ui, now);
   if (ui.drag) drawPreview(ctx, world, camera, ui.drag, k);
   if (ui.reroute) drawReroute(ctx, world, camera, ui.reroute, k);
@@ -129,8 +130,8 @@ function drawTerrain(ctx, world, camera, colors) {
 }
 
 /** Shade everything outside the open part of the map (world.view). */
-function drawClosed(ctx, view, world, camera, colors) {
-  const v = world.view;
+function drawClosed(ctx, view, world, camera, colors, shown) {
+  const v = shown ?? world.view;
   if (!v) return;
   const a = worldToScreen(camera, v.x, v.y);
   const b = worldToScreen(camera, v.x + v.width, v.y + v.height);
@@ -151,7 +152,9 @@ function drawClosed(ctx, view, world, camera, colors) {
 }
 
 /** A faint dot in the middle of every open grid square (stronger while drawing). */
-function drawGrid(ctx, world, camera, colors, k, drawing) {
+function drawGrid(ctx, world, camera, colors, k, drawing, shown) {
+  const v = shown ?? world.view;
+  const open = (x, y) => !v || (x >= v.x && y >= v.y && x <= v.x + v.width && y <= v.y + v.height);
   const { cols, rows } = gridSize(world);
   ctx.fillStyle = drawing ? colors.gridActive : colors.grid;
   const r = THEME.sizes.gridDot * k;
@@ -160,7 +163,7 @@ function drawGrid(ctx, world, camera, colors, k, drawing) {
     for (let cy = 0; cy < rows; cy++) {
       if (world.terrain?.has(`${cx},${cy}`)) continue;
       const c = cellCenter(world, { cx, cy });
-      if (!inView(world, c.x, c.y)) continue;
+      if (!open(c.x, c.y)) continue;
       const p = worldToScreen(camera, c.x, c.y);
       ctx.moveTo(p.x + r, p.y);
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
