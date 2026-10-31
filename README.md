@@ -103,6 +103,8 @@ Every field is commented in the file. The ones that matter most:
 | `links.bandwidth`, `links.packetSpeed` | How much a link carries and how fast packets move |
 | `inventory` | Starting equipment (upgrades, switches, firewalls, SD-WAN, leased lines) |
 | `spawn.packetIntervalScale` | Global traffic rate: lower is busier |
+| `spawn.warmupDays`, `spawn.warmupScale` | The calm start: traffic begins this many times sparser and eases to normal over these days |
+| `spawn.newSiteGrace` | Seconds a new site waits before sending, so you can connect it |
 | `spawn.weeklyIntervalMultiplier`, `spawn.minIntervalScale` | How much busier each week gets, and the cap |
 | `growth.firstSiteAt`, `growth.interval`, `growth.intervalDecay`, `growth.minInterval` | How often new sites appear, and how fast that speeds up |
 | `growth.startRadius`, `growth.radiusGrowthPerDay` | How far from the data center new sites can appear |

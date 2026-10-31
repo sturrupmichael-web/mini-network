@@ -121,7 +121,16 @@ export const CONFIG = {
      */
     packetIntervalScale: 1,
     /** Game seconds before the first packets appear. */
-    graceSeconds: 2,
+    graceSeconds: 4,
+    /**
+     * A calm start: traffic begins warmupScale times sparser and eases to
+     * normal over the first warmupDays days, so the first days are about
+     * laying out the network rather than firefighting.
+     */
+    warmupDays: 3,
+    warmupScale: 2.5,
+    /** Game seconds a newly arrived site waits before sending, so you have time to connect it. */
+    newSiteGrace: 10,
     /**
      * Traffic grows each week: packet intervals are multiplied by this at
      * the start of every new week (0.9 = 10% more traffic per week)...
@@ -159,9 +168,9 @@ export const CONFIG = {
 
   growth: {
     /** Game seconds before the first new site appears. */
-    firstSiteAt: 25,
+    firstSiteAt: 40,
     /** Seconds between new sites at the start. */
-    interval: 34,
+    interval: 40,
     /** Each new site shortens the gap: interval × this, every time. */
     intervalDecay: 0.95,
     /** The gap never gets shorter than this many seconds. */

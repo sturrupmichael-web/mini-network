@@ -7,7 +7,13 @@ import { createWorld } from "../src/sim/world.js";
 export const DATA = SIM_DATA;
 
 /** A world on the first real map, or on a custom map. */
-export function makeWorld({ seed = "test", map = MAPS[0], config = CONFIG, data = DATA, outages = true } = {}) {
+/**
+ * CONFIG without the calm start (spawn.warmupDays), so mechanics tests see
+ * full traffic from the first second. The warm-up has its own tests.
+ */
+export const TEST_CONFIG = { ...CONFIG, spawn: { ...CONFIG.spawn, warmupDays: 0 } };
+
+export function makeWorld({ seed = "test", map = MAPS[0], config = TEST_CONFIG, data = DATA, outages = true } = {}) {
   return createWorld({ config, data, map, seed, outages });
 }
 
@@ -18,7 +24,7 @@ export function customMap(start) {
 
 /** Deep-ish copy of CONFIG with overrides merged per section. */
 export function configWith(overrides) {
-  const out = structuredClone(CONFIG);
+  const out = structuredClone(TEST_CONFIG);
   for (const [section, values] of Object.entries(overrides)) Object.assign(out[section], values);
   return out;
 }

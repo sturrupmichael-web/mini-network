@@ -33,7 +33,7 @@ export const EVENTS = [
       "Construction crew: 1, Network: 0.",
     ],
     effect: "linkCut",
-    schedule: { day: 4, every: [5, 8] },
+    schedule: { day: 6, every: [5, 8] },
     duration: 30,
     // count: how many links go down at once.
     params: { count: 1 },

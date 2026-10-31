@@ -16,13 +16,24 @@ export function currentDay(world) {
   return Math.floor(world.time / world.config.time.secondsPerDay);
 }
 
-/** Seconds until a site's next packet, scaled by traffic growth and time of day. */
+/**
+ * How much sparser traffic is right now because of the calm start: from
+ * spawn.warmupScale at the beginning, easing to 1 after spawn.warmupDays.
+ */
+export function warmupFactor(world) {
+  const { warmupDays = 0, warmupScale = 1 } = world.config.spawn;
+  if (warmupDays <= 0) return 1;
+  const t = Math.min(1, world.time / (warmupDays * world.config.time.secondsPerDay));
+  const eased = t * t * (3 - 2 * t); // smoothstep
+  return warmupScale + (1 - warmupScale) * eased;
+}
+
+/** Seconds until a site's next packet, scaled by the calm start, traffic growth and time of day. */
 export function randomInterval(world, def) {
   const [min, max] = def.packetInterval;
   const activity = isNight(world) ? def.activity.night : def.activity.day;
-  return (
-    (world.rng.range(min, max) * world.config.spawn.packetIntervalScale * world.trafficScale) / Math.max(activity, 0.01)
-  );
+  const scale = world.config.spawn.packetIntervalScale * world.trafficScale * warmupFactor(world);
+  return (world.rng.range(min, max) * scale) / Math.max(activity, 0.01);
 }
 
 export function addSite(world, type, x, y, label = null) {
@@ -42,7 +53,9 @@ export function addSite(world, type, x, y, label = null) {
     overload: 0,
     born: world.time,
     sdwan: false,
-    nextSpawn: def.packetInterval ? world.time + world.config.spawn.graceSeconds + randomInterval(world, def) : Infinity,
+    nextSpawn: def.packetInterval
+      ? world.time + (world.tick > 0 ? (world.config.spawn.newSiteGrace ?? 0) : world.config.spawn.graceSeconds) + randomInterval(world, def)
+      : Infinity,
   };
   world.sites.push(site);
   world.siteById.set(site.id, site);
