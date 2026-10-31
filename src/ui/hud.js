@@ -7,6 +7,13 @@ import { clock } from "../sim/progression.js";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+// Small inline SVG icons (no external files).
+const svg = (body) =>
+  `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const SOUND_ON = svg('<path d="M3 8h3l4-3v10l-4-3H3z" fill="currentColor"/><path d="M13 7.5a3.5 3.5 0 0 1 0 5M15.5 5a7 7 0 0 1 0 10"/>');
+const SOUND_OFF = svg('<path d="M3 8h3l4-3v10l-4-3H3z" fill="currentColor"/><path d="M13.5 8l4 4M17.5 8l-4 4"/>');
+const MENU_ICON = svg('<path d="M4 6h12M4 10h12M4 14h12"/>');
+
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
@@ -30,7 +37,8 @@ export function describeSurvival(days) {
  * @param {object} opts.items  ITEMS from equipment.js, in tray order.
  * @param {(item: string, e: PointerEvent) => void} opts.onItemPointerDown
  */
-export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemPointerDown, speeds, items }) {
+export function createHud(root, opts) {
+  const { onPause, onSpeed, onReward, onRestart, onMenu, onMute, onShare, onItemPointerDown, speeds, items } = opts;
   root.innerHTML = `
     <div class="hud-top">
       <div class="hud-left">
@@ -42,8 +50,10 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemP
           <span class="hud-clock-dial" data-hud="dial"></span>
           <span data-hud="clock-text">Week 1 · Mon</span>
         </div>
+        <div class="hud-run" data-hud="run"></div>
       </div>
-      <div class="hud-controls" role="group" aria-label="Game speed">
+      <div class="hud-controls" role="group" aria-label="Game controls">
+        <button type="button" class="hud-btn" data-hud="mute" aria-label="Mute sound" aria-pressed="false">${SOUND_ON}</button>
         <button type="button" class="hud-btn" data-hud="pause" aria-label="Pause" aria-pressed="false">❚❚</button>
         ${speeds
           .map(
@@ -51,6 +61,7 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemP
               `<button type="button" class="hud-btn" data-speed="${s}" aria-label="${s}× speed" aria-pressed="false">${s}×</button>`,
           )
           .join("")}
+        <button type="button" class="hud-btn" data-hud="menu" aria-label="Menu">${MENU_ICON}</button>
       </div>
     </div>
     <div class="hud-tray" data-hud="tray">
@@ -86,7 +97,16 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemP
           <div><dt>Delivered</dt><dd data-hud="over-score">0</dd></div>
           <div><dt>Survived</dt><dd data-hud="over-days">0 days</dd></div>
         </dl>
-        <button type="button" class="primary-btn" data-hud="restart">Play again</button>
+        <p class="card-best" data-hud="over-best"></p>
+        <div class="share" data-hud="share" hidden>
+          <pre class="share-text" data-hud="share-text"></pre>
+          <button type="button" class="secondary-btn" data-hud="share-btn">Copy result</button>
+        </div>
+        <div class="card-actions">
+          <button type="button" class="primary-btn" data-hud="restart">Play again</button>
+          <button type="button" class="secondary-btn" data-hud="over-menu">Menu</button>
+        </div>
+        <p class="card-seed" data-hud="over-seed"></p>
       </div>
     </div>
   `;
@@ -110,6 +130,15 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemP
     overScore: q("over-score"),
     overDays: q("over-days"),
     restart: q("restart"),
+    mute: q("mute"),
+    menu: q("menu"),
+    run: q("run"),
+    overBest: q("over-best"),
+    overSeed: q("over-seed"),
+    overMenu: q("over-menu"),
+    share: q("share"),
+    shareText: q("share-text"),
+    shareBtn: q("share-btn"),
   };
   const speedBtns = [...root.querySelectorAll("[data-speed]")];
   const trayItems = [...root.querySelectorAll("[data-item]")];
@@ -129,6 +158,14 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemP
   el.pause.addEventListener("click", () => onPause());
   for (const b of speedBtns) b.addEventListener("click", () => onSpeed(Number(b.dataset.speed)));
   el.restart.addEventListener("click", () => onRestart());
+  el.menu.addEventListener("click", () => onMenu());
+  el.overMenu.addEventListener("click", () => onMenu());
+  el.mute.addEventListener("click", () => onMute());
+  el.shareBtn.addEventListener("click", async () => {
+    const ok = await onShare(el.shareText.textContent);
+    el.shareBtn.textContent = ok ? "Copied!" : "Select and copy above";
+    setTimeout(() => (el.shareBtn.textContent = "Copy result"), 2000);
+  });
   el.rewardOptions.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-reward]");
     if (btn) onReward(btn.dataset.reward);
@@ -136,10 +173,35 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemP
 
   let toastTimer = 0;
   let tickerTimer = 0;
-  const shown = { score: -1, paused: null, speed: null, clock: "", dial: -1, reward: null, over: null, armed: null, inv: {} };
+  const shown = {
+    score: -1,
+    paused: null,
+    speed: null,
+    clock: "",
+    dial: -1,
+    reward: null,
+    over: null,
+    armed: null,
+    inv: {},
+    muted: null,
+    run: "",
+  };
 
   return {
-    update(world, loop, ui) {
+    /**
+     * @param {object} run  { label, muted, result: { best, bestScore, share, seed } | null }
+     */
+    update(world, loop, ui, run) {
+      if (shown.muted !== run.muted) {
+        shown.muted = run.muted;
+        el.mute.innerHTML = run.muted ? SOUND_OFF : SOUND_ON;
+        el.mute.setAttribute("aria-pressed", String(run.muted));
+        el.mute.setAttribute("aria-label", run.muted ? "Unmute sound" : "Mute sound");
+      }
+      if (shown.run !== run.label) {
+        shown.run = run.label;
+        el.run.textContent = run.label;
+      }
       if (shown.score !== world.stats.score) {
         shown.score = world.stats.score;
         el.score.textContent = String(world.stats.score);
@@ -215,6 +277,11 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemP
           el.overText.textContent = "Its queue stayed over capacity for too long.";
           el.overScore.textContent = String(world.stats.score);
           el.overDays.textContent = describeSurvival(clock(world).daysSurvived);
+          const r = run.result;
+          el.overBest.textContent = !r ? "" : r.best ? "New best score!" : r.bestScore !== null ? `Best: ${r.bestScore}` : "";
+          el.share.hidden = !r?.share;
+          el.shareText.textContent = r?.share ?? "";
+          el.overSeed.textContent = r?.seed ? `Seed ${r.seed}` : "";
           el.restart.focus();
         }
       }

@@ -58,7 +58,7 @@ export function removeButtonRadius(camera) {
  * @param {number} now Real time in seconds, for gentle animations.
  */
 export function render(ctx, view, world, camera, ui, now = 0) {
-  const colors = THEME.light;
+  const colors = THEME[ui.theme] ?? THEME.light;
   const k = uiScale(camera);
   ctx.fillStyle = mixColor(colors.background, colors.nightBackground, nightAmount(world));
   ctx.fillRect(0, 0, view.width, view.height);
@@ -66,11 +66,12 @@ export function render(ctx, view, world, camera, ui, now = 0) {
   ctx.lineJoin = "round";
 
   drawBoundaries(ctx, world, camera, colors, k);
-  drawLinks(ctx, world, camera, colors, k, ui);
+  drawLinks(ctx, world, camera, colors, k, ui, now);
   if (ui.drag) drawPreview(ctx, world, camera, ui.drag, k);
   if (ui.reroute) drawReroute(ctx, world, camera, ui.reroute, k);
   if (ui.place?.target) drawDropTarget(ctx, world, camera, colors, ui.place.target, k);
   drawTravellingPackets(ctx, world, camera, k);
+  drawPops(ctx, ui.pops, now, k);
   for (const site of world.sites) drawOverload(ctx, world, camera, colors, site, k, now);
   for (const site of world.sites) drawSite(ctx, world, camera, colors, site, ui, k);
   for (const site of world.sites) drawQueue(ctx, world, camera, site, k);
@@ -112,13 +113,52 @@ function lineColor(line) {
   return THEME.lineColors[line % THEME.lineColors.length];
 }
 
+const firstSeen = new WeakMap();
+
+/** Delivery "pops": a ring that grows and fades where a packet arrived. */
+function drawPops(ctx, pops, now, k) {
+  if (!pops) return;
+  for (const pop of pops) {
+    const t = (now - pop.born) / THEME.popSeconds;
+    if (t < 0 || t > 1) continue;
+    ctx.globalAlpha = 0.5 * (1 - t);
+    ctx.strokeStyle = pop.color;
+    ctx.lineWidth = 2 * k;
+    ctx.beginPath();
+    ctx.arc(pop.x, pop.y, (10 + 16 * t) * k, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** The first `length` world units of a path. */
+function partialPath(points, length) {
+  const out = [points[0]];
+  let left = length;
+  for (let i = 1; i < points.length; i++) {
+    const seg = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    if (left >= seg) {
+      out.push(points[i]);
+      left -= seg;
+    } else {
+      const t = seg === 0 ? 0 : left / seg;
+      out.push({ x: points[i - 1].x + (points[i].x - points[i - 1].x) * t, y: points[i - 1].y + (points[i].y - points[i - 1].y) * t });
+      break;
+    }
+  }
+  return out;
+}
+
 function linkWidth(world, link, k) {
   return THEME.sizes.linkWidth * world.data.tiers[link.tier].width * k;
 }
 
-function drawLinks(ctx, world, camera, colors, k, ui) {
+function drawLinks(ctx, world, camera, colors, k, ui, now) {
   for (const link of world.links) {
-    const pts = toScreenPath(camera, link.path);
+    // Animate in real time, so links drawn while paused still finish drawing.
+    if (!firstSeen.has(link)) firstSeen.set(link, now);
+    const grow = (now - firstSeen.get(link)) / THEME.linkAppearSeconds;
+    const pts = toScreenPath(camera, grow >= 1 ? link.path : partialPath(link.path, link.length * Math.max(0.05, grow)));
     const width = linkWidth(world, link, k);
     const faded = ui.reroute?.linkId === link.id;
     const selected = ui.selectedLinkId === link.id;

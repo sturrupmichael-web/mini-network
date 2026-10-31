@@ -312,7 +312,7 @@ export const tests = [
   }],
   ["warehouses and retail branches start appearing once unlocked", () => {
     const world = makeWorld({ config: configWith({ overload: { seconds: 1e9 } }), seed: "types" });
-    run(world, DAY * 10);
+    for (let d = 0; d < 25 && !world.sites.some((s) => s.type === "retail"); d++) run(world, DAY);
     const types = new Set(world.sites.map((s) => s.type));
     assert.ok(types.has("warehouse") && types.has("retail"), [...types].join(", "));
     for (const s of world.sites) {

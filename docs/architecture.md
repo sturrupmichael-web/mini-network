@@ -1,6 +1,6 @@
 # Mini Network architecture
 
-This is the map of the code as of Phase 3. It's meant to stay current as
+This is the map of the code as of Phase 4. It's meant to stay current as
 phases land.
 
 ## The big picture
@@ -14,7 +14,7 @@ data/ (content + balance)       src/
   rewards.js          │            sites.js     sites, capacity, destinations, day/night
   events.js           │            links.js     links, tiers, firewalls, leased lines
   equipment.js        │            packets.js   spawning, dispatch, movement, drops
-  index.js            │            routing.js   congestion-aware shortest paths, cut links
+  modes.js            │            routing.js   congestion-aware shortest paths, cut links
   theme.js ───────┐   │            equipment.js switches, SD-WAN
                   │   │            events.js    event schedule and effects
                   │   │            progression.js  clock, new sites, traffic growth, rewards
@@ -22,12 +22,16 @@ data/ (content + balance)       src/
                   │   │          loop.js      fixed-timestep loop: pause, 1×/2×
                   │   │          rng.js       seeded RNG (all gameplay randomness)
                   │   │          storage.js   localStorage wrapper ("miniNetwork:" keys)
+                  │   │          scores.js    top-5 high scores per mode+map / daily date
+                  │   │          daily.js     daily challenge seed + map, share text
+                  │   │          audio/audio.js  Web Audio: ambient pad, delivery notes, cues
                   └───┴────────▶ render/      reads the world, draws it
                                    canvas.js    high-DPI + responsive canvas
                                    camera.js    world ⇄ screen (turns maps 90° on portrait phones)
                                    renderer.js  draws boundaries, links, packets, sites, queues
                                  input/pointer.js  drag-to-draw links (mouse, pen, touch)
-                                 ui/hud.js         DOM HUD: score, pause/speed, inventory tray
+                                 ui/hud.js         DOM HUD: score, pause/speed, mute, menu, tray, cards
+                                 ui/title.js       title screen: mode, map, best score, settings
                                  data/validate.js  checks data/ is well-formed
 ```
 
@@ -105,6 +109,37 @@ land between ticks.
   `linkCut`, `broadcast`, `acquisition`, `securityRules`, `cloudMigration`,
   `ddos`. `triggerEvent(world, id)` starts one immediately.
 
+## Phase 4: modes, maps and polish
+
+- **Title screen** (`ui/title.js`): pick a mode and a map, see your best
+  score for that pair, Play. While it's open a preview game runs behind it.
+  The in-game menu button pauses and reopens it with Resume.
+- **Maps** (`data/maps.js`): Florida Region, Coast to Coast and Campus.
+  A map's optional `tuning` is merged over `config.js` section by section
+  (`sim/config.js` `configForMap`), so maps can change spacing, growth,
+  links or inventory without code.
+- **Modes** (`data/modes.js`): Classic; Zen (`outages: false`, so
+  `isHalted` never ends the game and no scores are kept); Daily challenge
+  (`daily.js` hashes today's date to a map and seed `daily-YYYY-MM-DD`;
+  the game-over card shows a share line with one coloured square per day,
+  from `world.dayStress`, the worst overload ring that day).
+- **High scores** (`scores.js`): storage key `highScores`, a top-5 list per
+  `mode:map` or `daily:date`.
+- **Settings** stored under `settings`: `{ speed, muted, theme }`. Theme is
+  `system`, `light` or `dark`; it sets `data-theme` on `<html>` (CSS
+  variables) and `ui.theme` (canvas palette from `THEME.light` /
+  `THEME.dark`).
+- **Audio** (`audio/audio.js`, `data/audio.js`): all sound is generated with
+  Web Audio, no files. Each delivery plays a note of a pentatonic scale
+  picked by traffic type, snapped to a beat (`createBeatQueue`) and capped
+  per beat. Cues play for new sites, events, rewards and game over. Audio
+  starts on the first tap (browser rule) and respects the mute setting.
+- **Animation**: sites scale in, links draw along their path over
+  `theme.linkAppearSeconds` of real time, and deliveries pop. These are
+  render-only (real time, not game ticks), so they never affect the sim.
+- **URL parameters**: `?seed=` skips the title and starts that seed; add
+  `&map=campus` and/or `&mode=zen` to pick the map or mode.
+
 ## Progression
 
 - Days last `time.secondsPerDay` game seconds. Each new day adds
@@ -158,7 +193,10 @@ commented in the file itself; this is the overview.
 | `rewards.js` | `REWARDS` | `[{ id, label, detail, weight, fromWeek, grant: { links?, upgrades?, switches?, firewalls?, sdwan?, leased?, capacity? } }]` |
 | `events.js` | `EVENTS` | `[{ id, name, toasts, effect, schedule: { day, every? } or { weekday, fromWeek }, duration, params }]` |
 | `equipment.js` | `LINK_TIERS`, `ITEMS` | Link tiers `{ id, name, bandwidth, width }`; tray items `{ name, hint, target }` |
-| `theme.js` | `THEME` | Colours, line palette, drawing sizes |
+| `maps.js` tuning | `tuning` | Per-map overrides of any `config.js` section |
+| `modes.js` | `MODES` | `{ id: { name, detail, outages, daily, scores } }` |
+| `audio.js` | `AUDIO` | Volume, ambient pad, scale/beat for delivery notes, per-traffic scale steps, cues |
+| `theme.js` | `THEME` | `light` and `dark` palettes, line colours, drawing sizes, animation timings |
 | `index.js` | `GAME_DATA` | All of the above in one object (add new data files here) |
 
 `src/data/validate.js` checks all of it: types and ranges, that every

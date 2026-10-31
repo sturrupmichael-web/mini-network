@@ -5,7 +5,9 @@
  * A browser test is `async (t) => { ... }` where t has:
  *   t.target          { name: "dev" | "built" | "file", url }
  *   t.open(opts)      Opens the game and returns a Playwright page once it
- *                     has started. opts: { mobile?: boolean, seed?: string }
+ *                     has started. opts: { mobile?: boolean, seed?: string,
+ *                     query?: string, context? }. seed: null opens the title
+ *                     screen; context reuses a browser context (same storage).
  *                     Desktop is 1366×768; mobile is a 390×844 phone with
  *                     touch at 3× pixel density.
  * Any console error or uncaught exception on any opened page fails the test.
@@ -76,15 +78,16 @@ export async function createHarness() {
     const errors = [];
     const t = {
       target,
-      async open({ mobile = false, seed = "test" } = {}) {
-        const context = await browser.newContext(mobile ? MOBILE : DESKTOP);
-        contexts.push(context);
+      async open({ mobile = false, seed = "test", query = "", context: reuse = null } = {}) {
+        const context = reuse ?? (await browser.newContext(mobile ? MOBILE : DESKTOP));
+        if (!reuse) contexts.push(context);
         const page = await context.newPage();
         page.on("console", (msg) => {
           if (msg.type() === "error") errors.push(`console.error: ${msg.text()}`);
         });
         page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
-        await page.goto(`${target.url}?seed=${encodeURIComponent(seed)}`);
+        const params = [seed === null ? "" : `seed=${encodeURIComponent(seed)}`, query].filter(Boolean).join("&");
+        await page.goto(params ? `${target.url}?${params}` : target.url);
         await page.waitForFunction(() => window.miniNetwork?.world, null, { timeout: 10_000 });
         return page;
       },

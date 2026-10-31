@@ -61,6 +61,8 @@ export function createWorld({ config, data, map, seed, outages = true }) {
     /** Set at the end of each week until the player picks: { week, options: [rewardId, rewardId] }. */
     pendingReward: null,
     routing: { tables: new Map(), dirty: true, nextRecompute: 0 },
+    /** For each day, the closest any site came to an outage (0–1): the daily share grid. */
+    dayStress: [0],
     /** Whether events fire on their schedule (data/events.js). */
     scheduleEvents: true,
     /** Things that happened this tick, for audio and UI. Cleared by the consumer. */
@@ -95,6 +97,10 @@ export function step(world) {
 
 function updateOverload(world) {
   const { seconds, recoveryRate } = world.config.overload;
+  let worst = 0;
+  for (const site of world.sites) worst = Math.max(worst, site.overload / seconds);
+  while (world.dayStress.length <= world.day) world.dayStress.push(0);
+  world.dayStress[world.day] = Math.min(1, Math.max(world.dayStress[world.day], worst));
   for (const site of world.sites) {
     const over = site.queue.length > siteCapacity(world, site);
     const before = site.overload;
@@ -132,6 +138,7 @@ export function snapshot(world) {
     activeEvents: world.activeEvents,
     nextId: world.nextId,
     stats: world.stats,
+    dayStress: world.dayStress,
     inventory: world.inventory,
     sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan]),
     links: world.links.map((l) => [l.id, l.a, l.b, l.busyUntil, l.inTransit, l.tier, l.firewall, l.leased, l.down]),

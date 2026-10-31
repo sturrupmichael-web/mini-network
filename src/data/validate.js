@@ -11,7 +11,7 @@ const SCHEDULE_KEYS = ["day", "every", "weekday", "fromWeek"];
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const isPos = (v) => isNum(v) && v > 0;
 
-export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects }) {
+export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects, modes, audio }) {
   const errors = [];
   const err = (msg) => errors.push(msg);
 
@@ -192,11 +192,37 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
         if (d < spacing) err(`${at}.start[${a}] and [${b}] are closer than config.sites.minSpacing`);
       }
     }
+    for (const [section, values] of Object.entries(m.tuning ?? {})) {
+      if (!config?.[section] || typeof config[section] !== "object") {
+        err(`${at}.tuning.${section} is not a config section`);
+        continue;
+      }
+      for (const [k, v] of Object.entries(values)) {
+        if (!(k in config[section])) err(`${at}.tuning.${section}.${k} is not in config.${section}`);
+        else if (typeof v !== typeof config[section][k]) err(`${at}.tuning.${section}.${k} has the wrong type`);
+      }
+    }
     for (const [j, line] of (m.boundaries ?? []).entries()) {
       if (!Array.isArray(line) || line.length < 2 || !line.every((p) => Array.isArray(p) && isNum(p[0]) && isNum(p[1]))) {
         err(`${at}.boundaries[${j}] must be a list of at least two [x, y] points`);
       }
     }
+  }
+  // Modes.
+  if (modes) {
+    if (!modes.classic) err("modes needs a classic mode");
+    for (const [id, m] of Object.entries(modes)) {
+      if (typeof m.name !== "string" || typeof m.detail !== "string") err(`modes.${id} needs a name and detail`);
+      for (const k of ["outages", "daily", "scores"]) if (typeof m[k] !== "boolean") err(`modes.${id}.${k} must be true or false`);
+    }
+  }
+
+  // Audio.
+  if (audio) {
+    for (const tid of Object.keys(audio.trafficSteps ?? {})) {
+      if (!traffic?.[tid]) err(`audio.trafficSteps references unknown traffic type "${tid}"`);
+    }
+    if (!Array.isArray(audio.notes?.scale) || audio.notes.scale.length === 0) err("audio.notes.scale must list semitones");
   }
   return errors;
 }

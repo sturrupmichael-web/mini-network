@@ -30,6 +30,32 @@ export const THEME = {
     cloudFill: "#ffffff",
     dropTarget: "rgba(47, 128, 237, 0.25)",
   },
+  dark: {
+    background: "#1d1e22",
+    boundary: "#26313b",
+    siteFill: "#1d1e22",
+    siteStroke: "#e9e6df",
+    hubFill: "#e9e6df",
+    hubStroke: "#e9e6df",
+    hubText: "#1d1e22",
+    highlight: "rgba(233, 230, 223, 0.14)",
+    preview: "rgba(233, 230, 223, 0.35)",
+    overload: "#ff6b5e",
+    overloadTrack: "rgba(255, 107, 94, 0.18)",
+    removeFill: "#e9e6df",
+    removeText: "#1d1e22",
+    dim: "rgba(29, 30, 34, 0.6)",
+    nightBackground: "#141518",
+    down: "#ff6b5e",
+    blocked: "#f2a65a",
+    firewall: "#f2a65a",
+    sdwan: "#2cc4cf",
+    leasedStripe: "#1d1e22",
+    switchFill: "#e9e6df",
+    edgeFill: "#e9e6df",
+    cloudFill: "#1d1e22",
+    dropTarget: "rgba(86, 160, 255, 0.3)",
+  },
   /**
    * Colours for links. Each drag gesture draws in the next colour, so the
    * links you draw in one stroke read as one "line".
@@ -46,4 +72,8 @@ export const THEME = {
   },
   /** Seconds a new site takes to grow in. */
   siteAppearSeconds: 0.6,
+  /** Seconds a new link takes to draw itself. */
+  linkAppearSeconds: 0.25,
+  /** Seconds a delivery "pop" ring lasts. */
+  popSeconds: 0.5,
 };

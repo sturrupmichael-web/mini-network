@@ -1,13 +1,14 @@
 /**
- * Entry point. Picks a seed (from ?seed= in the URL, or at random) and
- * starts the game.
+ * Entry point: checks the data, then starts the game (title screen, or
+ * straight into a game when the URL has ?seed=).
  */
 import { GAME_DATA } from "../data/index.js";
 import { validateData } from "./data/validate.js";
 import { EFFECT_NAMES } from "./sim/events.js";
 import { startGame } from "./game.js";
 
-const urlSeed = new URLSearchParams(location.search).get("seed");
+const params = new URLSearchParams(location.search);
+const urlSeed = params.get("seed");
 
 function randomSeed() {
   const n = new Uint32Array(1);
@@ -21,11 +22,13 @@ if (problems.length) {
   console.warn(`Mini Network data problems:\n${problems.join("\n")}`);
 }
 
+// ?seed=… (optionally with &map=… and &mode=…) skips the title screen and
+// replays exactly that game: handy for bug reports and for the tests.
 const game = startGame({
   canvas: document.getElementById("game"),
   hudRoot: document.getElementById("hud"),
-  seed: urlSeed || randomSeed(),
-  // A ?seed= in the URL replays the same game every time.
-  newSeed: () => urlSeed || randomSeed(),
+  titleRoot: document.getElementById("title"),
+  randomSeed,
+  autostart: urlSeed ? { seed: urlSeed, mapId: params.get("map") ?? undefined, modeId: params.get("mode") ?? "classic" } : null,
 });
 window.miniNetwork = game;
