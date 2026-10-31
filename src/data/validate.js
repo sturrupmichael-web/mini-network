@@ -74,6 +74,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     const at = `sites.${id}`;
     if (typeof s.name !== "string" || !s.name) err(`${at}.name is missing`);
     if (!SITE_SHAPES.includes(s.shape)) err(`${at}.shape "${s.shape}" must be one of ${SITE_SHAPES.join(", ")}`);
+    if (typeof s.color !== "string" || !s.color) err(`${at}.color must be a CSS colour string`);
     if (!isPos(s.size)) err(`${at}.size must be > 0`);
     if (!isPos(s.capacity)) err(`${at}.capacity must be > 0`);
     if (s.packetInterval !== null) {
@@ -114,7 +115,9 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
   }
   const itemIds = Object.keys(items ?? {});
   for (const [id, item] of Object.entries(items ?? {})) {
-    if (typeof item.name !== "string" || typeof item.hint !== "string") err(`items.${id} needs a name and a hint`);
+    if (typeof item.name !== "string" || typeof item.hint !== "string" || typeof item.tip !== "string") {
+      err(`items.${id} needs a name, a hint and a tip`);
+    }
     if (![null, "link", "site", "map"].includes(item.target)) err(`items.${id}.target must be link, site, map or null`);
   }
   for (const k of Object.keys(config?.inventory ?? {})) {

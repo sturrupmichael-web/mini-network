@@ -30,5 +30,7 @@ const game = startGame({
   titleRoot: document.getElementById("title"),
   randomSeed,
   autostart: urlSeed ? { seed: urlSeed, mapId: params.get("map") ?? undefined, modeId: params.get("mode") ?? "classic" } : null,
+  // ?debug opens the tuning panel (the ` key toggles it too).
+  debug: params.has("debug"),
 });
 window.miniNetwork = game;

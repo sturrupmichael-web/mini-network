@@ -1,6 +1,6 @@
 # Mini Network architecture
 
-This is the map of the code as of Phase 4. It's meant to stay current as
+This is the map of the code as of Phase 5. It's meant to stay current as
 phases land.
 
 ## The big picture
@@ -32,6 +32,9 @@ data/ (content + balance)       src/
                                  input/pointer.js  drag-to-draw links (mouse, pen, touch)
                                  ui/hud.js         DOM HUD: score, pause/speed, mute, menu, tray, cards
                                  ui/title.js       title screen: mode, map, best score, settings
+                                 ui/debug.js       debug panel (` key or ?debug): stats, cheats, knobs
+                               sim/debug.js      cheats + stats for the panel (pure, tested in node)
+                               tools/screenshot.mjs  makes the 1200×630 card image
                                  data/validate.js  checks data/ is well-formed
 ```
 
@@ -140,6 +143,24 @@ land between ticks.
 - **URL parameters**: `?seed=` skips the title and starts that seed; add
   `&map=campus` and/or `&mode=zen` to pick the map or mode.
 
+## Phase 5: tuning and deploy
+
+- **Debug panel** (`ui/debug.js`, `sim/debug.js`): `spawnSite`,
+  `spawnBurst`, `skipTime` (steps the sim, stops at a reward or game over),
+  `grantItems` and `debugStats`. Knob edits replace a config *section* on the
+  running world (`world.config = { ...config, links: { ...links, bandwidth } }`)
+  because sections can be shared with `data/config.js`; a new game starts
+  from the data again.
+- **Site colours**: each site type has a `color` in `data/sites.js`; every
+  site is drawn filled with it, with a white outline and a soft shadow
+  (`THEME.*.siteOutline`, `siteShadow`).
+- **Tray tooltips**: each item in `data/equipment.js` has a `tip`. The HUD
+  shows it on mouse hover (listening on the tray, since disabled buttons get
+  no pointer events), on keyboard focus, and for 2.5 s after a touch press,
+  with a live "N left" line.
+- **Deploy**: see the README. Tests on `main` → Deploy builds and publishes
+  `index.html` to Pages.
+
 ## Progression
 
 - Days last `time.secondsPerDay` game seconds. Each new day adds
@@ -187,12 +208,12 @@ commented in the file itself; this is the overview.
 | File | Export | What it holds |
 | --- | --- | --- |
 | `config.js` | `CONFIG` | Engine and balance numbers: `sim` (tick rate, speeds), `links` (starting count, daily delivery, bandwidth, packet speed), `routing` (cost weights), `spawn` (packet rate, weekly growth), `sites` (spacing, edge and boundary clearance), `growth` (new-site timing, radius, type odds), `overload` (ring timer length and recovery), `time` (day length, days per week), `input` (radii for mouse and touch), `view` (padding, HUD space) |
-| `sites.js` | `SITE_TYPES` | `{ id: { name, shape, size, capacity, packetInterval, traffic: { trafficId: weight }, activity: { day, night }, burst, unlockDay, junction? } }` |
+| `sites.js` | `SITE_TYPES` | `{ id: { name, shape, color, size, capacity, packetInterval, traffic: { trafficId: weight }, activity: { day, night }, burst, unlockDay, junction? } }` |
 | `traffic.js` | `TRAFFIC_TYPES` | `{ id: { name, color, shape, size, to, points, unlockDay, hours, maxHops?, dropPoints?, cloudShare?, junk? } }` |
 | `maps.js` | `MAPS` | `[{ id, name, width, height, start: [{ type, x, y, label? }], boundaries: [[[x,y], …]] }]` |
 | `rewards.js` | `REWARDS` | `[{ id, label, detail, weight, fromWeek, grant: { links?, upgrades?, switches?, firewalls?, sdwan?, leased?, capacity? } }]` |
 | `events.js` | `EVENTS` | `[{ id, name, toasts, effect, schedule: { day, every? } or { weekday, fromWeek }, duration, params }]` |
-| `equipment.js` | `LINK_TIERS`, `ITEMS` | Link tiers `{ id, name, bandwidth, width }`; tray items `{ name, hint, target }` |
+| `equipment.js` | `LINK_TIERS`, `ITEMS` | Link tiers `{ id, name, bandwidth, width }`; tray items `{ name, hint, tip, target }` |
 | `maps.js` tuning | `tuning` | Per-map overrides of any `config.js` section |
 | `modes.js` | `MODES` | `{ id: { name, detail, outages, daily, scores } }` |
 | `audio.js` | `AUDIO` | Volume, ambient pad, scale/beat for delivery notes, per-traffic scale steps, cues |

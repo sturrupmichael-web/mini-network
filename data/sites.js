@@ -5,6 +5,9 @@
  *   name            Display name.
  *   shape           How it is drawn: "hub" | "circle" | "square" |
  *                   "triangle" | "cloud" | "edge" | "switch".
+ *   color           Fill colour (any CSS colour). Each type has its own so
+ *                   you can tell sites apart at a glance; all get a white
+ *                   outline.
  *   size            Drawing size multiplier (1 = a normal site).
  *   capacity        Packets the queue can hold before the site starts to
  *                   overload (its ring timer fills).
@@ -26,6 +29,7 @@ export const SITE_TYPES = {
   datacenter: {
     name: "Data center",
     shape: "hub",
+    color: "#33415c",
     size: 1.5,
     capacity: 40,
     packetInterval: null,
@@ -37,6 +41,7 @@ export const SITE_TYPES = {
   office: {
     name: "Office",
     shape: "circle",
+    color: "#2f80ed",
     size: 1,
     capacity: 8,
     packetInterval: [2.2, 4.5],
@@ -48,6 +53,7 @@ export const SITE_TYPES = {
   warehouse: {
     name: "Warehouse",
     shape: "square",
+    color: "#f2994a",
     size: 1,
     capacity: 10,
     packetInterval: [3.5, 6],
@@ -59,6 +65,7 @@ export const SITE_TYPES = {
   retail: {
     name: "Retail branch",
     shape: "triangle",
+    color: "#2fa66a",
     size: 1,
     capacity: 7,
     packetInterval: [2.8, 5],
@@ -70,6 +77,7 @@ export const SITE_TYPES = {
   cloud: {
     name: "Cloud region",
     shape: "cloud",
+    color: "#56b4e9",
     size: 1.35,
     capacity: 40,
     packetInterval: null,
@@ -81,6 +89,7 @@ export const SITE_TYPES = {
   edge: {
     name: "Internet edge",
     shape: "edge",
+    color: "#9b51e0",
     size: 1.25,
     capacity: 30,
     packetInterval: null,
@@ -92,6 +101,7 @@ export const SITE_TYPES = {
   switch: {
     name: "Switch",
     shape: "switch",
+    color: "#6b6f76",
     size: 0.7,
     capacity: 24,
     packetInterval: null,

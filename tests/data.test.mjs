@@ -79,4 +79,17 @@ export const tests = [
   ["theme has line colours", () => {
     assert.ok(THEME.lineColors.length >= 5);
   }],
+  ["every site type has its own fill colour", () => {
+    const colors = Object.values(SITE_TYPES).map((s) => s.color);
+    assert.ok(colors.every((c) => typeof c === "string" && c.length > 0));
+    assert.equal(new Set(colors).size, colors.length, "no two types share a colour");
+  }],
+  ["the validator catches a site type without a colour or a tool without a tip", () => {
+    const data = all();
+    delete data.sites.office.color;
+    delete data.items.switches.tip;
+    const problems = validateData(data).join("\n");
+    assert.match(problems, /sites\.office\.color/);
+    assert.match(problems, /items\.switches needs a name, a hint and a tip/);
+  }],
 ];

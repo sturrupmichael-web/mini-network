@@ -682,3 +682,114 @@ body {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Debug panel (` to toggle, or ?debug). Tuning tool, so plain and compact. */
+.debug-panel {
+  position: absolute;
+  top: calc(64px + env(safe-area-inset-top));
+  left: calc(8px + env(safe-area-inset-left));
+  z-index: 30;
+  width: min(340px, calc(100vw - 16px));
+  max-height: calc(100% - 150px);
+  overflow: auto;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(6px);
+}
+.debug-panel[hidden] {
+  display: none;
+}
+.debug-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.debug-hint {
+  color: var(--muted);
+  flex: 1;
+}
+.debug-close {
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.debug-stats {
+  margin: 0 0 8px;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+}
+.debug-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.debug-panel button,
+.debug-panel select,
+.debug-panel input[type="number"] {
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.debug-panel button {
+  cursor: pointer;
+}
+.debug-knobs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+}
+.debug-knobs label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--muted);
+}
+.debug-knobs input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.debug-note {
+  color: var(--muted);
+}
+
+/* Tray tooltips: hover (mouse), focus (keyboard) or press (touch). */
+.tray-tip {
+  position: fixed;
+  z-index: 20;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--bg);
+  font: 13px/1.4 var(--font);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tray-tip[hidden] {
+  display: none;
+}
+.tray-tip strong {
+  font-size: 14px;
+}
+.tray-tip-count {
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}

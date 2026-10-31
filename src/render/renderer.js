@@ -357,14 +357,11 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
     ctx.arc(x, y, r * 1.9, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.lineWidth = THEME.sizes.siteStroke * k;
   ctx.beginPath();
   switch (def.shape) {
     case "hub": {
       const s = r * 1.05;
       ctx.roundRect(x - s, y - s, s * 2, s * 2, s * 0.35);
-      ctx.fillStyle = colors.hubFill;
-      ctx.strokeStyle = colors.hubStroke;
       break;
     }
     case "square":
@@ -395,19 +392,15 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
     default:
       ctx.arc(x, y, r, 0, Math.PI * 2);
   }
-  ctx.fillStyle = colors.siteFill;
-  ctx.strokeStyle = colors.siteStroke;
-  if (def.shape === "hub") {
-    ctx.fillStyle = colors.hubFill;
-    ctx.strokeStyle = colors.hubStroke;
-  } else if (def.shape === "edge") {
-    ctx.fillStyle = colors.edgeFill;
-  } else if (def.shape === "switch") {
-    ctx.fillStyle = colors.switchFill;
-  } else if (def.shape === "cloud") {
-    ctx.fillStyle = colors.cloudFill;
-  }
+  // Coloured by type, with a white outline and a soft shadow behind it.
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = colors.siteShadow;
+  ctx.lineWidth = (THEME.sizes.siteStroke + 2) * k;
+  ctx.stroke();
+  ctx.fillStyle = def.color;
   ctx.fill();
+  ctx.strokeStyle = colors.siteOutline;
+  ctx.lineWidth = THEME.sizes.siteStroke * k;
   ctx.stroke();
   if (def.shape === "switch") {
     // Four little ports.

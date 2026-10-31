@@ -8,7 +8,8 @@
     "serve": "python3 -m http.server 8000",
     "build": "node build.mjs",
     "test": "node tests/run.mjs",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "screenshot": "node tools/screenshot.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

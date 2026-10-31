@@ -68,13 +68,18 @@ export function createHud(root, opts) {
       ${Object.entries(items)
         .map(
           ([id, item]) => `
-        <button type="button" class="tray-item" data-item="${id}" title="${escapeHtml(`${item.name}: ${item.hint}`)}"
+        <button type="button" class="tray-item" data-item="${id}" aria-describedby="tray-tip"
           aria-label="${escapeHtml(item.name)}" ${item.target ? "" : 'tabindex="-1"'}>
           <span class="tray-icon tray-icon-${id}" aria-hidden="true"></span>
           <span class="tray-count" data-count="${id}">0</span>
         </button>`,
         )
         .join("")}
+    </div>
+    <div class="tray-tip" id="tray-tip" data-hud="tip" role="tooltip" hidden>
+      <strong data-hud="tip-name"></strong>
+      <span data-hud="tip-text"></span>
+      <span class="tray-tip-count" data-hud="tip-count"></span>
     </div>
     <div class="hud-hint" data-hud="hint" role="status"></div>
     <div class="hud-toast" data-hud="toast" role="status"></div>
@@ -144,7 +149,68 @@ export function createHud(root, opts) {
   const trayItems = [...root.querySelectorAll("[data-item]")];
   const counts = Object.fromEntries(trayItems.map((b) => [b.dataset.item, b.querySelector("[data-count]")]));
 
+  // Tooltips: hover with a mouse, keyboard focus, or press on a phone.
+  const tip = {
+    box: q("tip"),
+    name: q("tip-name"),
+    text: q("tip-text"),
+    count: q("tip-count"),
+    item: null,
+    timer: 0,
+  };
+  function tipCount(id) {
+    const n = Number(counts[id].textContent);
+    if (id === "links") return n === 0 ? "None left. One arrives each day." : `${n} left`;
+    if (n === 0) return "None left. Weekly rewards can give you more.";
+    return `${n} left`;
+  }
+  function showTip(b, hideAfter = 0) {
+    const id = b.dataset.item;
+    clearTimeout(tip.timer);
+    tip.item = id;
+    tip.name.textContent = items[id].name;
+    tip.text.textContent = items[id].tip;
+    tip.count.textContent = tipCount(id);
+    tip.box.hidden = false;
+    // Centre it above the button, kept on screen.
+    const r = b.getBoundingClientRect();
+    const w = tip.box.offsetWidth;
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+    tip.box.style.left = `${left}px`;
+    tip.box.style.bottom = `${window.innerHeight - r.top + 10}px`;
+    if (hideAfter) tip.timer = setTimeout(hideTip, hideAfter);
+  }
+  function hideTip() {
+    clearTimeout(tip.timer);
+    tip.item = null;
+    tip.box.hidden = true;
+  }
+  // Disabled buttons don't get pointer events, so listen on the tray.
+  const trayButtonAt = (e) => trayItems.find((b) => {
+    if (b.hidden) return false;
+    const r = b.getBoundingClientRect();
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  });
+  const tray = q("tray");
+  tray.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "touch" || e.buttons) return;
+    const b = trayButtonAt(e);
+    if (!b) hideTip();
+    else if (tip.item !== b.dataset.item) showTip(b);
+  });
+  tray.addEventListener("pointerleave", (e) => {
+    if (e.pointerType !== "touch") hideTip();
+  });
+  tray.addEventListener("pointerdown", (e) => {
+    const b = trayButtonAt(e);
+    if (!b) return;
+    if (e.pointerType === "touch") showTip(b, 2500);
+    else hideTip();
+  });
+
   for (const b of trayItems) {
+    b.addEventListener("focus", () => b.matches(":focus-visible") && showTip(b));
+    b.addEventListener("blur", hideTip);
     b.addEventListener("pointerdown", (e) => {
       if (b.disabled) return;
       onItemPointerDown(b.dataset.item, e);
@@ -218,6 +284,7 @@ export function createHud(root, opts) {
           if (items[id].target) b.disabled = n === 0;
         }
       }
+      if (tip.item) tip.count.textContent = tipCount(tip.item);
       const armed = ui.armed ?? ui.place?.item ?? null;
       if (armed !== shown.armed) {
         shown.armed = armed;

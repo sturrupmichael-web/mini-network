@@ -21,14 +21,46 @@ export const LINK_TIERS = [
  * config.inventory, rewards and events.
  *   name    Display name.
  *   hint    One line shown when you pick it up.
+ *   tip     What it's for, shown when you hover over it (or press and hold
+ *           it on a phone).
  *   target  What you drop it on: "link" | "site" | "map" (empty space or a
  *           link) | null (used automatically).
  */
 export const ITEMS = {
-  links: { name: "Links", hint: "Drag between sites to connect them.", target: null },
-  upgrades: { name: "Bandwidth upgrade", hint: "Drop on a link to move it up a tier.", target: "link" },
-  switches: { name: "Switch", hint: "Drop on the map, or on a link to split it.", target: "map" },
-  firewalls: { name: "Firewall", hint: "Drop on a link. Internet edge links need one.", target: "link" },
-  sdwan: { name: "SD-WAN box", hint: "Drop on a site so it reroutes around cuts at once.", target: "site" },
-  leased: { name: "Leased lines", hint: "Used up when a link crosses a carrier boundary.", target: null },
+  links: {
+    name: "Links",
+    hint: "Drag between sites to connect them.",
+    tip: "Drag from one site to another to connect them. Removing a link gives it back. You get one more each day.",
+    target: null,
+  },
+  upgrades: {
+    name: "Bandwidth upgrade",
+    hint: "Drop on a link to move it up a tier.",
+    tip: "Drop on a busy link to move it up a tier (Copper, T1, Fiber, Dark fiber). Thicker links carry more packets at once.",
+    target: "link",
+  },
+  switches: {
+    name: "Switch",
+    hint: "Drop on the map, or on a link to split it.",
+    tip: "A junction for your links. Drop it on empty map to start a hub, or on a link to split it in two so more sites can join.",
+    target: "map",
+  },
+  firewalls: {
+    name: "Firewall",
+    hint: "Drop on a link. Internet edge links need one.",
+    tip: "Drop on a link. After the security rules change, links to an internet edge carry nothing without one, and it filters attack traffic.",
+    target: "link",
+  },
+  sdwan: {
+    name: "SD-WAN box",
+    hint: "Drop on a site so it reroutes around cuts at once.",
+    tip: "Drop on a site. When a link is cut, that site finds another way instantly instead of waiting for the network to catch up.",
+    target: "site",
+  },
+  leased: {
+    name: "Leased lines",
+    hint: "Used up when a link crosses a carrier boundary.",
+    tip: "Needed to run a link across a shaded carrier boundary, one per boundary crossed. You get it back when the link is removed.",
+    target: null,
+  },
 };

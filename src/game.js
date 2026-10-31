@@ -12,6 +12,7 @@ import { setupCanvas } from "./render/canvas.js";
 import { render } from "./render/renderer.js";
 import { pointAlong } from "./sim/geometry.js";
 import { configForMap } from "./sim/config.js";
+import { debugStats, grantItems, skipTime, spawnBurst, spawnSite } from "./sim/debug.js";
 import { chooseReward, clock } from "./sim/progression.js";
 import {
   addFirewall,
@@ -31,6 +32,7 @@ import {
 } from "./sim/world.js";
 import { bestScore, recordScore, scoreKey } from "./scores.js";
 import { createStorage } from "./storage.js";
+import { createDebugPanel } from "./ui/debug.js";
 import { createHud } from "./ui/hud.js";
 import { createTitle } from "./ui/title.js";
 
@@ -59,8 +61,9 @@ const REFUSED_TEXT = {
  * @param {() => string} opts.randomSeed
  * @param {object} [opts.autostart]  { modeId, mapId, seed } to skip the title screen
  *                                   (from the URL: ?seed=…&map=…&mode=…).
+ * @param {boolean} [opts.debug]     Open the debug panel at start (?debug).
  */
-export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = null }) {
+export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = null, debug = false }) {
   const storage = createStorage();
   const settings = { speed: 1, muted: false, theme: "system", ...storage.get("settings", {}) };
   const saveSettings = () => storage.set("settings", settings);
@@ -140,6 +143,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
         result: run?.result ?? null,
       });
       world.events.length = 0;
+      debugPanel.update();
     },
   });
   loop.speed = CONFIG.sim.speeds.includes(settings.speed) ? settings.speed : 1;
@@ -303,6 +307,39 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     getSettings: () => settings,
   });
 
+  const debugPanel = createDebugPanel(hudRoot.parentElement, {
+    siteTypes: Object.keys(GAME_DATA.sites).filter((t) => !GAME_DATA.sites[t].junction),
+    events: GAME_DATA.events.map((e) => ({ id: e.id, name: e.name })),
+    stats: () => (run ? debugStats(world) : null),
+    config: () => (run ? world.config : null),
+    actions: {
+      spawnSite: (type) => (run ? spawnSite(world, type) : null),
+      burst: (n) => (run ? spawnBurst(world, n) : 0),
+      trigger: (id) => Boolean(run) && triggerEvent(world, id),
+      skip: (amount) => {
+        if (!run) return null;
+        const { secondsPerDay, daysPerWeek } = world.config.time;
+        const seconds = amount === "day" ? secondsPerDay : amount === "week" ? secondsPerDay * daysPerWeek : Number(amount);
+        const r = skipTime(world, seconds);
+        // Don't play a minute of sounds and pops at once.
+        world.events = world.events.filter((e) => e.type === "event" || e.type === "outage");
+        return r;
+      },
+      grant: (items) => run && grantItems(world, items),
+      getOutages: () => world.outages,
+      setOutages: (on) => {
+        world.outages = on;
+      },
+      // Replace the section rather than editing it: sections can be shared with data/config.js.
+      setKnob: (section, key, value) => {
+        world.config = { ...world.config, [section]: { ...world.config[section], [key]: value } };
+        world.routing.dirty = true;
+      },
+      copy: copyText,
+    },
+  });
+  if (debug) debugPanel.toggle(true);
+
   /** Use a tray item on what it was dropped on. */
   function place(item, target) {
     if (item === "upgrades" && target.kind === "link") return upgradeLink(world, target.id);
@@ -341,6 +378,10 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
   window.addEventListener("keydown", (e) => {
     // Leave keys alone in form fields and in dialogs (Space/Enter pick a reward there).
     if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, .overlay")) return;
+    if (e.code === "Backquote") {
+      debugPanel.toggle();
+      return;
+    }
     if (!run) return;
     if (e.code === "Space") {
       e.preventDefault();
@@ -371,7 +412,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
   else title.show();
   loop.start();
 
-  // A small handle for tests and debugging (and the Phase 5 debug panel).
+  // A small handle for tests and debugging.
   return {
     get world() {
       return world;
@@ -389,6 +430,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     camera,
     ui,
     audio,
+    debugPanel,
     /** Screen position (CSS px, relative to the canvas) of a site. */
     sitePosition(id) {
       const site = world.siteById.get(id);
@@ -406,7 +448,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       for (let i = 0; i < n && !isHalted(world); i++) step(world);
     },
     snapshot: () => snapshot(world),
-    /** Start an event now, by id (tests and the Phase 5 debug panel). */
+    /** Start an event now, by id (tests and the debug panel). */
     triggerEvent: (id) => triggerEvent(world, id),
     /** Use a tray item on a target, as if dropped there (tests). */
     place,
