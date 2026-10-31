@@ -1,15 +1,14 @@
 /** Shared helpers for node tests. */
 import { CONFIG } from "../data/config.js";
+import { GAME_DATA } from "../data/index.js";
 import { MAPS } from "../data/maps.js";
-import { SITE_TYPES } from "../data/sites.js";
-import { TRAFFIC_TYPES } from "../data/traffic.js";
 import { createWorld } from "../src/sim/world.js";
 
-export const DATA = { sites: SITE_TYPES, traffic: TRAFFIC_TYPES };
+export const DATA = { sites: GAME_DATA.sites, traffic: GAME_DATA.traffic, rewards: GAME_DATA.rewards };
 
 /** A world on the first real map, or on a custom map. */
-export function makeWorld({ seed = "test", map = MAPS[0], config = CONFIG, data = DATA } = {}) {
-  return createWorld({ config, data, map, seed });
+export function makeWorld({ seed = "test", map = MAPS[0], config = CONFIG, data = DATA, outages = true } = {}) {
+  return createWorld({ config, data, map, seed, outages });
 }
 
 /** A map with sites at the given positions: [{ type, x, y }]. */

@@ -32,7 +32,12 @@ export const CONFIG = {
 
   links: {
     /** Links in the inventory at the start of a game. */
-    startingCount: 8,
+    startingCount: 10,
+    /**
+     * Links delivered at the start of each new day. New sites keep
+     * arriving faster than this, so links get scarcer as the game goes on.
+     */
+    perDay: 1,
     /**
      * Base bandwidth: how many size-1 packets per second a link can start
      * sending in each direction. A packet of size 2 uses twice the time.
@@ -70,14 +75,64 @@ export const CONFIG = {
     packetIntervalScale: 1,
     /** Game seconds before the first packets appear. */
     graceSeconds: 2,
+    /**
+     * Traffic grows each week: packet intervals are multiplied by this at
+     * the start of every new week (0.9 = 10% more traffic per week)...
+     */
+    weeklyIntervalMultiplier: 0.9,
+    /** ...but never below this fraction of the original interval. */
+    minIntervalScale: 0.35,
   },
 
   sites: {
-    /**
-     * Closest two sites may be, in world units. Used by map validation now
-     * and by site spawning in Phase 2.
-     */
+    /** Closest two sites may be, in world units (maps and new sites). */
     minSpacing: 110,
+    /** New sites keep at least this far (wu) from the map edge... */
+    edgeMargin: 50,
+    /** ...and from carrier boundaries. */
+    boundaryClearance: 45,
+  },
+
+  growth: {
+    /** Game seconds before the first new site appears. */
+    firstSiteAt: 25,
+    /** Seconds between new sites at the start. */
+    interval: 34,
+    /** Each new site shortens the gap: interval × this, every time. */
+    intervalDecay: 0.95,
+    /** The gap never gets shorter than this many seconds. */
+    minInterval: 12,
+    /**
+     * New sites appear within this distance (wu) of the data center at
+     * first, so the network grows outward. The radius grows every day.
+     */
+    startRadius: 380,
+    radiusGrowthPerDay: 60,
+    /** Random spots tried per new site before giving up until next time. */
+    attempts: 60,
+    /** Relative odds of each site type for new sites (ids from sites.js). */
+    types: { office: 1 },
+  },
+
+  overload: {
+    /**
+     * When a site's queue holds more packets than its capacity, its ring
+     * timer fills. If it stays full for this many game seconds: outage,
+     * game over.
+     */
+    seconds: 20,
+    /**
+     * When the queue is back under capacity the timer drains at this many
+     * seconds per second (2 = recovers twice as fast as it fills).
+     */
+    recoveryRate: 1.5,
+  },
+
+  time: {
+    /** Game seconds in one in-game day (a day at 1× takes this long). */
+    secondsPerDay: 30,
+    /** Days per week. The game pauses for a reward at the end of each week. */
+    daysPerWeek: 7,
   },
 
   input: {
@@ -91,6 +146,11 @@ export const CONFIG = {
      */
     mouseConnectRadius: 18,
     touchConnectRadius: 28,
+    /** How close (px) to a link counts as touching it (to select or reroute it). */
+    mouseLinkRadius: 9,
+    touchLinkRadius: 18,
+    /** How far (px) a press on a link must move before it becomes a reroute drag. */
+    dragThreshold: 8,
   },
 
   view: {

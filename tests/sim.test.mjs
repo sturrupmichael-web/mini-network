@@ -49,11 +49,12 @@ export const tests = [
   }],
   ["linked offices deliver packets to the data center", () => {
     const world = makeWorld();
-    for (const o of offices(world)) assert.ok(addLink(world, o.id, hub(world).id).ok);
+    const linked = offices(world);
+    for (const o of linked) assert.ok(addLink(world, o.id, hub(world).id).ok);
     run(world, seconds(60));
     assert.ok(world.stats.delivered > 5, `delivered ${world.stats.delivered}`);
     assert.equal(world.stats.score, world.stats.delivered);
-    const waiting = offices(world).reduce((n, s) => n + s.queue.length, 0);
+    const waiting = linked.reduce((n, s) => n + s.queue.length, 0);
     assert.ok(waiting <= 3, `${waiting} packets still waiting`);
   }],
   ["packets route through intermediate sites", () => {

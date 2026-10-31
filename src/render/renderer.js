@@ -15,7 +15,21 @@ export function siteRadiusPx(world, site, camera) {
   return THEME.sizes.siteRadius * def.size * uiScale(camera);
 }
 
-export function render(ctx, view, world, camera, ui) {
+/** Screen position of the "remove" button for a selected link. */
+export function removeButtonPos(world, link, camera) {
+  const mid = pointAlong(link.path, link.length / 2);
+  return worldToScreen(camera, mid.x, mid.y);
+}
+
+export function removeButtonRadius(camera) {
+  return THEME.sizes.removeButton * uiScale(camera);
+}
+
+/**
+ * @param {object} ui  { drag, reroute, selectedLinkId, hoverSiteId } from input.
+ * @param {number} now Real time in seconds, for gentle animations.
+ */
+export function render(ctx, view, world, camera, ui, now = 0) {
   const colors = THEME.light;
   const k = uiScale(camera);
   ctx.fillStyle = colors.background;
@@ -24,11 +38,24 @@ export function render(ctx, view, world, camera, ui) {
   ctx.lineJoin = "round";
 
   drawBoundaries(ctx, world, camera, colors, k);
-  drawLinks(ctx, world, camera, colors, k);
+  drawLinks(ctx, world, camera, colors, k, ui);
   if (ui.drag) drawPreview(ctx, world, camera, ui.drag, k);
+  if (ui.reroute) drawReroute(ctx, world, camera, ui.reroute, k);
   drawTravellingPackets(ctx, world, camera, k);
+  for (const site of world.sites) drawOverload(ctx, world, camera, colors, site, k, now);
   for (const site of world.sites) drawSite(ctx, world, camera, colors, site, ui, k);
   for (const site of world.sites) drawQueue(ctx, world, camera, site, k);
+  const selected = ui.selectedLinkId && world.linkById.get(ui.selectedLinkId);
+  if (selected) drawRemoveButton(ctx, world, camera, colors, selected);
+  if (world.over) {
+    ctx.fillStyle = colors.dim;
+    ctx.fillRect(0, 0, view.width, view.height);
+    const site = world.siteById.get(world.over.siteId);
+    if (site) {
+      drawOverload(ctx, world, camera, colors, site, k, now);
+      drawSite(ctx, world, camera, colors, site, ui, k);
+    }
+  }
 }
 
 function toScreenPath(camera, points) {
@@ -54,16 +81,25 @@ function lineColor(line) {
   return THEME.lineColors[line % THEME.lineColors.length];
 }
 
-function drawLinks(ctx, world, camera, colors, k) {
+function drawLinks(ctx, world, camera, colors, k, ui) {
   for (const link of world.links) {
     const pts = toScreenPath(camera, link.path);
+    const faded = ui.reroute?.linkId === link.id;
+    const selected = ui.selectedLinkId === link.id;
+    if (selected) {
+      ctx.strokeStyle = colors.highlight;
+      ctx.lineWidth = (THEME.sizes.linkWidth + 12) * k;
+      strokePath(ctx, pts);
+    }
     // A thin background-coloured outline keeps crossing lines readable.
     ctx.strokeStyle = colors.background;
     ctx.lineWidth = (THEME.sizes.linkWidth + 3) * k;
     strokePath(ctx, pts);
+    ctx.globalAlpha = faded ? 0.3 : 1;
     ctx.strokeStyle = lineColor(link.line);
     ctx.lineWidth = THEME.sizes.linkWidth * k;
     strokePath(ctx, pts);
+    ctx.globalAlpha = 1;
   }
 }
 
@@ -75,6 +111,20 @@ function drawPreview(ctx, world, camera, drag, k) {
   ctx.strokeStyle = lineColor(drag.line);
   ctx.lineWidth = THEME.sizes.linkWidth * k;
   strokePath(ctx, pts);
+  ctx.globalAlpha = 1;
+}
+
+function drawReroute(ctx, world, camera, reroute, k) {
+  const link = world.linkById.get(reroute.linkId);
+  if (!link || !reroute.pointerWorld) return;
+  const a = world.siteById.get(link.a);
+  const b = world.siteById.get(link.b);
+  const p = reroute.pointerWorld;
+  ctx.globalAlpha = 0.6;
+  ctx.strokeStyle = lineColor(link.line);
+  ctx.lineWidth = THEME.sizes.linkWidth * k;
+  strokePath(ctx, toScreenPath(camera, octilinearPath(a, p)));
+  strokePath(ctx, toScreenPath(camera, octilinearPath(p, b)));
   ctx.globalAlpha = 1;
 }
 
@@ -116,11 +166,37 @@ function drawTravellingPackets(ctx, world, camera, k) {
   }
 }
 
+/** The ring timer: fills clockwise from the top as the site stays overloaded. */
+function drawOverload(ctx, world, camera, colors, site, k, now) {
+  if (site.overload <= 0) return;
+  const { x, y } = worldToScreen(camera, site.x, site.y);
+  const r = siteRadiusPx(world, site, camera) * 1.85;
+  const fraction = Math.min(1, site.overload / world.config.overload.seconds);
+  // A slow, soft breathing pulse; a little quicker as the timer fills.
+  const pulse = 0.5 + 0.5 * Math.sin(now * (2.2 + fraction * 2.5));
+  ctx.lineWidth = THEME.sizes.overloadRing * k;
+  ctx.strokeStyle = colors.overloadTrack;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 0.65 + 0.35 * pulse;
+  ctx.strokeStyle = colors.overload;
+  ctx.beginPath();
+  ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
 function drawSite(ctx, world, camera, colors, site, ui, k) {
   const def = world.data.sites[site.type];
   const { x, y } = worldToScreen(camera, site.x, site.y);
-  const r = siteRadiusPx(world, site, camera);
-  const highlighted = ui.hoverSiteId === site.id || ui.drag?.fromSiteId === site.id;
+  // New sites grow in with a little overshoot.
+  const age = (world.time - site.born) / THEME.siteAppearSeconds;
+  const grow = site.born === 0 || age >= 1 ? 1 : easeOutBack(Math.max(0, age));
+  const r = siteRadiusPx(world, site, camera) * grow;
+  if (r <= 0.1) return;
+  const highlighted =
+    ui.hoverSiteId === site.id || ui.drag?.fromSiteId === site.id || ui.reroute?.overSiteId === site.id;
   if (highlighted) {
     ctx.fillStyle = colors.highlight;
     ctx.beginPath();
@@ -164,6 +240,11 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
   }
 }
 
+function easeOutBack(t) {
+  const c = 1.70158;
+  return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2;
+}
+
 /** Waiting packets sit in a small grid to the right of their site. */
 function drawQueue(ctx, world, camera, site, k) {
   if (site.queue.length === 0) return;
@@ -172,9 +253,11 @@ function drawQueue(ctx, world, camera, site, k) {
   const pr = THEME.sizes.packetRadius * k;
   const gap = pr * 2.6;
   const perRow = 6;
+  // Show at most three rows; a long queue is already shouting via its ring.
+  const shown = site.queue.slice(0, perRow * 3);
   const byId = new Map();
   for (const p of world.packets) byId.set(p.id, p);
-  site.queue.forEach((id, i) => {
+  shown.forEach((id, i) => {
     const packet = byId.get(id);
     if (!packet) return;
     const traffic = world.data.traffic[packet.traffic];
@@ -183,4 +266,22 @@ function drawQueue(ctx, world, camera, site, k) {
     ctx.fillStyle = traffic.color;
     drawPacketShape(ctx, traffic.shape, x + r + gap * 0.9 + col * gap, y - r * 0.6 + row * gap, pr);
   });
+}
+
+function drawRemoveButton(ctx, world, camera, colors, link) {
+  const { x, y } = removeButtonPos(world, link, camera);
+  const r = removeButtonRadius(camera);
+  ctx.fillStyle = colors.removeFill;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = colors.removeText;
+  ctx.lineWidth = 2.2;
+  const d = r * 0.38;
+  ctx.beginPath();
+  ctx.moveTo(x - d, y - d);
+  ctx.lineTo(x + d, y + d);
+  ctx.moveTo(x + d, y - d);
+  ctx.lineTo(x - d, y + d);
+  ctx.stroke();
 }

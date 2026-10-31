@@ -4,7 +4,7 @@ A minimal network-building puzzle game for the browser. Sites pop up on a
 map and generate traffic; you draw links to keep it flowing to the data
 center.
 
-Work in progress (Phase 1 of 5). See [docs/architecture.md](docs/architecture.md).
+Work in progress (Phase 2 of 5). See [docs/architecture.md](docs/architecture.md).
 
 ## Run locally
 
@@ -15,8 +15,13 @@ npm run serve        # python3 -m http.server 8000
 
 Open <http://localhost:8000/dev.html>. Add `?seed=anything` to replay a game.
 
-Controls: drag from a site to another to link them (keep dragging to chain
-more). Space pauses, 1 and 2 set the speed.
+Controls:
+
+- Drag from a site to another to link them; keep dragging to chain more.
+- Tap or click a link, then its × to remove it (you get the link back).
+  Right-click or Delete also removes.
+- Drag a link onto another site to reroute it through that site.
+- Space pauses, 1 and 2 set the speed.
 
 ## Build and test
 

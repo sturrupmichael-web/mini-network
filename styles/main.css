@@ -151,3 +151,148 @@ body {
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+.hud-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hud-clock {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A little dial that fills through the day. */
+.hud-clock-dial {
+  --day: 0%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: conic-gradient(var(--ink) var(--day), rgba(0, 0, 0, 0.1) 0);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(246, 244, 239, 0.6);
+  pointer-events: auto;
+  animation: fade-in 0.25s ease-out;
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.card {
+  width: min(420px, 100%);
+  padding: 24px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+  text-align: center;
+}
+
+.card h2 {
+  margin: 4px 0 16px;
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.card-kicker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.card-text {
+  margin: -6px 0 16px;
+  color: var(--muted);
+}
+
+.reward-options {
+  display: grid;
+  gap: 10px;
+}
+
+.reward-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 2px solid #ebe8e1;
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reward-btn:hover,
+.reward-btn:focus-visible {
+  border-color: var(--ink);
+  outline: none;
+}
+
+.reward-btn strong {
+  font-size: 16px;
+}
+
+.reward-btn span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin: 0 0 20px;
+}
+
+.stats dt {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.stats dd {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.primary-btn {
+  min-width: 160px;
+  height: 46px;
+  border: 0;
+  border-radius: 23px;
+  background: var(--ink);
+  color: var(--bg);
+  font: 600 16px var(--font);
+  cursor: pointer;
+}
+
+.primary-btn:focus-visible {
+  outline: 2px solid #2f80ed;
+  outline-offset: 3px;
+}

@@ -9,7 +9,7 @@ const PACKET_SHAPES = ["circle", "square", "triangle", "diamond"];
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const isPos = (v) => isNum(v) && v > 0;
 
-export function validateData({ config, sites, traffic, maps }) {
+export function validateData({ config, sites, traffic, maps, rewards, rewardGrants }) {
   const errors = [];
   const err = (msg) => errors.push(msg);
 
@@ -19,6 +19,34 @@ export function validateData({ config, sites, traffic, maps }) {
   if (!Array.isArray(config?.sim?.speeds) || config.sim.speeds.length === 0) err("config.sim.speeds must be a non-empty array");
   if (!isPos(config?.links?.bandwidth)) err("config.links.bandwidth must be > 0");
   if (!isPos(config?.links?.packetSpeed)) err("config.links.packetSpeed must be > 0");
+
+  for (const [id, w] of Object.entries(config?.growth?.types ?? {})) {
+    if (!sites?.[id]) err(`config.growth.types references unknown site type "${id}"`);
+    else if (!isPos(w)) err(`config.growth.types.${id} weight must be > 0`);
+  }
+  if (Object.keys(config?.growth?.types ?? {}).length === 0) err("config.growth.types needs at least one site type");
+  if (config?.overload?.seconds <= 0) err("config.overload.seconds must be > 0");
+
+  // Rewards.
+  if (!Array.isArray(rewards) || rewards.length < 2) err("rewards must list at least two rewards");
+  const rewardIds = new Set();
+  for (const [i, r] of (rewards ?? []).entries()) {
+    const at = `rewards[${i}] (${r.id ?? "no id"})`;
+    if (typeof r.id !== "string" || !r.id) err(`${at}.id is missing`);
+    else if (rewardIds.has(r.id)) err(`${at}.id is a duplicate`);
+    rewardIds.add(r.id);
+    if (typeof r.label !== "string" || !r.label) err(`${at}.label is missing`);
+    if (typeof r.detail !== "string") err(`${at}.detail is missing`);
+    if (!isPos(r.weight)) err(`${at}.weight must be > 0`);
+    if (!Number.isInteger(r.fromWeek) || r.fromWeek < 1) err(`${at}.fromWeek must be a whole number ≥ 1`);
+    const grants = Object.entries(r.grant ?? {});
+    if (grants.length === 0) err(`${at}.grant is empty`);
+    for (const [k, v] of grants) {
+      if (!(rewardGrants ?? []).includes(k)) err(`${at}.grant has unknown key "${k}"`);
+      if (!Number.isInteger(v) || v <= 0) err(`${at}.grant.${k} must be a whole number > 0`);
+    }
+  }
+  if ((rewards ?? []).filter((r) => r.fromWeek === 1).length < 2) err("at least two rewards must be available from week 1");
 
   // Traffic types.
   for (const [id, t] of Object.entries(traffic ?? {})) {

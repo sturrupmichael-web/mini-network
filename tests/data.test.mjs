@@ -1,17 +1,12 @@
 import assert from "node:assert/strict";
-import { CONFIG } from "../data/config.js";
+import { GAME_DATA } from "../data/index.js";
 import { MAPS } from "../data/maps.js";
 import { SITE_TYPES } from "../data/sites.js";
 import { THEME } from "../data/theme.js";
 import { TRAFFIC_TYPES } from "../data/traffic.js";
 import { validateData } from "../src/data/validate.js";
 
-const all = () => ({
-  config: structuredClone(CONFIG),
-  sites: structuredClone(SITE_TYPES),
-  traffic: structuredClone(TRAFFIC_TYPES),
-  maps: structuredClone(MAPS),
-});
+const all = () => structuredClone(GAME_DATA);
 
 export const tests = [
   ["shipped data is valid", () => {
@@ -66,6 +61,19 @@ export const tests = [
     const errors = validateData(d);
     assert.ok(errors.some((e) => e.includes("duplicate")));
     assert.ok(errors.some((e) => e.includes("boundaries[0]")));
+  }],
+  ["catches bad rewards", () => {
+    const d = all();
+    d.rewards[0].grant = { unicorns: 1 };
+    d.rewards[1].id = d.rewards[2].id;
+    const errors = validateData(d);
+    assert.ok(errors.some((e) => e.includes('unknown key "unicorns"')));
+    assert.ok(errors.some((e) => e.includes("duplicate")));
+  }],
+  ["catches new-site weights naming unknown site types", () => {
+    const d = all();
+    d.config.growth.types = { lighthouse: 1 };
+    assert.ok(validateData(d).some((e) => e.includes('unknown site type "lighthouse"')));
   }],
   ["theme has line colours", () => {
     assert.ok(THEME.lineColors.length >= 5);

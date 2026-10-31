@@ -13,6 +13,11 @@ export const THEME = {
     hubText: "#ffffff",
     highlight: "rgba(43, 43, 43, 0.12)",
     preview: "rgba(43, 43, 43, 0.35)",
+    overload: "#e8483f",
+    overloadTrack: "rgba(232, 72, 63, 0.16)",
+    removeFill: "#2b2b2b",
+    removeText: "#ffffff",
+    dim: "rgba(246, 244, 239, 0.55)",
   },
   /**
    * Colours for links. Each drag gesture draws in the next colour, so the
@@ -25,5 +30,9 @@ export const THEME = {
     linkWidth: 7,
     packetRadius: 3.6,
     boundaryWidth: 16,
+    overloadRing: 4,
+    removeButton: 13,
   },
+  /** Seconds a new site takes to grow in. */
+  siteAppearSeconds: 0.6,
 };

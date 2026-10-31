@@ -49,3 +49,19 @@ export function pointAlong(points, dist) {
   }
   return { x: points[0].x, y: points[0].y };
 }
+
+/** Shortest distance from point p to the segment a–b. */
+export function distanceToSegment(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+  return Math.hypot(a.x + dx * t - p.x, a.y + dy * t - p.y);
+}
+
+/** Shortest distance from point p to a polyline. */
+export function distanceToPolyline(p, points) {
+  let best = Infinity;
+  for (let i = 1; i < points.length; i++) best = Math.min(best, distanceToSegment(p, points[i - 1], points[i]));
+  return best;
+}
