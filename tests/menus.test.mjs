@@ -97,4 +97,17 @@ export const tests = [
     await page.locator('[data-title="screen"]').waitFor({ state: "hidden" });
     assert((await run(page)) !== null, "playing");
   }],
+  ["the in-game theme button switches light and dark, and it's saved", async (t) => {
+    const page = await t.open();
+    const btn = page.locator('[data-hud="theme"]');
+    const theme = () => page.evaluate(() => [document.documentElement.dataset.theme, window.miniNetwork.ui.theme]);
+    const start = (await theme())[0];
+    const other = start === "dark" ? "light" : "dark";
+    await btn.click();
+    assert(JSON.stringify(await theme()) === JSON.stringify([other, other]), "switched");
+    assert((await btn.getAttribute("aria-label")) === (other === "dark" ? "Light mode" : "Dark mode"), "button label");
+    assert((await page.evaluate(() => window.miniNetwork.settings.theme)) === other, "saved");
+    await btn.click();
+    assert((await theme())[0] === start, "and back");
+  }],
 ];

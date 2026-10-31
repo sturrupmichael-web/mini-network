@@ -12,6 +12,8 @@ const svg = (body) =>
   `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const SOUND_ON = svg('<path d="M3 8h3l4-3v10l-4-3H3z" fill="currentColor"/><path d="M13 7.5a3.5 3.5 0 0 1 0 5M15.5 5a7 7 0 0 1 0 10"/>');
 const SOUND_OFF = svg('<path d="M3 8h3l4-3v10l-4-3H3z" fill="currentColor"/><path d="M13.5 8l4 4M17.5 8l-4 4"/>');
+const MOON = svg('<path d="M16 12.5A6.5 6.5 0 0 1 7.5 4a6.5 6.5 0 1 0 8.5 8.5z" fill="currentColor"/>');
+const SUN = svg('<circle cx="10" cy="10" r="3.2" fill="currentColor"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/>');
 const MENU_ICON = svg('<path d="M4 6h12M4 10h12M4 14h12"/>');
 
 const escapeHtml = (s) =>
@@ -38,7 +40,7 @@ export function describeSurvival(days) {
  * @param {(item: string, e: PointerEvent) => void} opts.onItemPointerDown
  */
 export function createHud(root, opts) {
-  const { onPause, onSpeed, onReward, onRestart, onMenu, onMute, onShare, onItemPointerDown, speeds, items } = opts;
+  const { onPause, onSpeed, onReward, onRestart, onMenu, onMute, onTheme, onShare, onItemPointerDown, speeds, items } = opts;
   root.innerHTML = `
     <div class="hud-top">
       <div class="hud-left">
@@ -53,6 +55,7 @@ export function createHud(root, opts) {
         <div class="hud-run" data-hud="run"></div>
       </div>
       <div class="hud-controls" role="group" aria-label="Game controls">
+        <button type="button" class="hud-btn" data-hud="theme" aria-label="Dark mode">${MOON}</button>
         <button type="button" class="hud-btn" data-hud="mute" aria-label="Mute sound" aria-pressed="false">${SOUND_ON}</button>
         <button type="button" class="hud-btn" data-hud="pause" aria-label="Pause" aria-pressed="false">❚❚</button>
         ${speeds
@@ -136,6 +139,7 @@ export function createHud(root, opts) {
     overDays: q("over-days"),
     restart: q("restart"),
     mute: q("mute"),
+    theme: q("theme"),
     menu: q("menu"),
     run: q("run"),
     overBest: q("over-best"),
@@ -227,6 +231,7 @@ export function createHud(root, opts) {
   el.menu.addEventListener("click", () => onMenu());
   el.overMenu.addEventListener("click", () => onMenu());
   el.mute.addEventListener("click", () => onMute());
+  el.theme.addEventListener("click", () => onTheme());
   el.shareBtn.addEventListener("click", async () => {
     const ok = await onShare(el.shareText.textContent);
     el.shareBtn.textContent = ok ? "Copied!" : "Select and copy above";
@@ -250,6 +255,7 @@ export function createHud(root, opts) {
     armed: null,
     inv: {},
     muted: null,
+    theme: null,
     run: "",
   };
 
@@ -263,6 +269,13 @@ export function createHud(root, opts) {
         el.mute.innerHTML = run.muted ? SOUND_OFF : SOUND_ON;
         el.mute.setAttribute("aria-pressed", String(run.muted));
         el.mute.setAttribute("aria-label", run.muted ? "Unmute sound" : "Mute sound");
+      }
+      if (shown.theme !== ui.theme) {
+        // Shows what a tap switches to: the moon in light mode, the sun in dark.
+        shown.theme = ui.theme;
+        const dark = ui.theme === "dark";
+        el.theme.innerHTML = dark ? SUN : MOON;
+        el.theme.setAttribute("aria-label", dark ? "Light mode" : "Dark mode");
       }
       if (shown.run !== run.label) {
         shown.run = run.label;

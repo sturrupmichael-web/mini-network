@@ -793,3 +793,25 @@ body {
   opacity: 0.7;
   font-variant-numeric: tabular-nums;
 }
+
+/* Phones: smaller top buttons so the whole row fits beside the score. */
+@media (max-width: 440px) {
+  .hud-top {
+    align-items: flex-start;
+  }
+  .hud-controls {
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .hud-btn {
+    min-width: 34px;
+    height: 34px;
+    padding: 0 6px;
+    border-radius: 17px;
+    font-size: 13px;
+  }
+  .hud-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+}

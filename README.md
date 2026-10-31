@@ -19,7 +19,8 @@ directly, so just reload after an edit.
 
 The title screen lets you pick a mode (Classic, Zen, Daily challenge) and a
 map (Florida Region, Coast to Coast, Campus). The gear opens settings
-(sound, and an Auto/Light/Dark theme).
+(sound, and an Auto/Light/Dark theme). In a game, the moon/sun button
+at the top switches between light and dark mode.
 
 URL options:
 

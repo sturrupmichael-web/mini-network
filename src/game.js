@@ -277,6 +277,11 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     onRestart: restart,
     onMenu: openMenu,
     onMute: () => setMuted(!settings.muted),
+    onTheme: () => {
+      settings.theme = ui.theme === "dark" ? "light" : "dark";
+      saveSettings();
+      applyTheme();
+    },
     onShare: copyText,
     onItemPointerDown: (item, e) => {
       if (e) input.startPlacement(item, e);
