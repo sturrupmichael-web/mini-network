@@ -5,8 +5,9 @@ import { SITE_TYPES } from "../data/sites.js";
 import { THEME } from "../data/theme.js";
 import { TRAFFIC_TYPES } from "../data/traffic.js";
 import { validateData } from "../src/data/validate.js";
+import { EFFECT_NAMES } from "../src/sim/events.js";
 
-const all = () => structuredClone(GAME_DATA);
+const all = () => ({ ...structuredClone(GAME_DATA), effects: EFFECT_NAMES });
 
 export const tests = [
   ["shipped data is valid", () => {

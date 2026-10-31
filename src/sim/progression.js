@@ -2,12 +2,11 @@
  * Progression: the day/week clock, new sites appearing, traffic growth,
  * and the weekly reward. Part of the simulation (no DOM).
  */
+import { scheduleDay } from "./events.js";
 import { distanceToPolyline } from "./geometry.js";
-// world.js imports this module too; the cycle is safe because nothing
-// here runs at import time.
-import { addSite } from "./world.js";
+import { addSite, hubSite } from "./sites.js";
 
-/** Day number (0-based), day of week (0-based) and fraction through the day. */
+/** Day number (0-based), week (1-based), day of week (0 = Mon) and fraction through the day. */
 export function clock(world) {
   const { secondsPerDay, daysPerWeek } = world.config.time;
   const day = Math.floor(world.time / secondsPerDay);
@@ -36,7 +35,9 @@ export function updateProgression(world) {
     world.day = day;
     world.inventory.links += world.config.links.perDay;
     world.events.push({ type: "day", day });
+    scheduleDay(world, day);
   }
+
   const weekEnd = world.week * daysPerWeek * secondsPerDay;
   if (world.time >= weekEnd) {
     world.week++;
@@ -48,10 +49,10 @@ export function updateProgression(world) {
 
   if (world.time >= world.growth.nextSiteAt) {
     const g = world.config.growth;
-    const type = world.rng.weighted(g.types);
+    const types = Object.fromEntries(Object.entries(g.types).filter(([t]) => world.data.sites[t].unlockDay <= day));
     const pos = findSiteSpot(world);
-    if (pos) {
-      const site = addSite(world, type, pos.x, pos.y);
+    if (pos && Object.keys(types).length > 0) {
+      const site = addSite(world, world.rng.weighted(types), pos.x, pos.y);
       world.events.push({ type: "site-added", siteId: site.id });
     }
     world.growth.interval = Math.max(g.minInterval, world.growth.interval * g.intervalDecay);
@@ -59,25 +60,32 @@ export function updateProgression(world) {
   }
 }
 
-/** A random valid spot for a new site, or null if none was found. */
-export function findSiteSpot(world) {
+/**
+ * A random valid spot for a new site within `radius` of `center`, or null.
+ * Valid: inside the edge margin, at least minSpacing from every site, and
+ * clear of carrier boundaries.
+ */
+export function findSpot(world, { center, radius }) {
   const { map, config } = world;
   const { edgeMargin, minSpacing, boundaryClearance } = config.sites;
-  const g = config.growth;
-  const hub = world.sites.find((s) => world.data.sites[s.type].shape === "hub") ?? { x: map.width / 2, y: map.height / 2 };
-  const radius = g.startRadius + g.radiusGrowthPerDay * clock(world).day;
-  for (let i = 0; i < g.attempts; i++) {
-    const x = world.rng.range(edgeMargin, map.width - edgeMargin);
-    const y = world.rng.range(edgeMargin, map.height - edgeMargin);
-    if (Math.hypot(x - hub.x, y - hub.y) > radius) continue;
+  const boundaries = (map.boundaries ?? []).map((b) => b.map(([x, y]) => ({ x, y })));
+  for (let i = 0; i < config.growth.attempts; i++) {
+    const x = Math.round(world.rng.range(edgeMargin, map.width - edgeMargin));
+    const y = Math.round(world.rng.range(edgeMargin, map.height - edgeMargin));
+    if (Math.hypot(x - center.x, y - center.y) > radius) continue;
     if (world.sites.some((s) => Math.hypot(s.x - x, s.y - y) < minSpacing)) continue;
     const p = { x, y };
-    if ((map.boundaries ?? []).some((b) => distanceToPolyline(p, b.map(([bx, by]) => ({ x: bx, y: by }))) < boundaryClearance)) {
-      continue;
-    }
-    return { x: Math.round(x), y: Math.round(y) };
+    if (boundaries.some((b) => distanceToPolyline(p, b) < boundaryClearance)) continue;
+    return { x, y };
   }
   return null;
+}
+
+/** A spot for the next regular new site: near the data center, spreading out each day. */
+export function findSiteSpot(world) {
+  const g = world.config.growth;
+  const hub = hubSite(world) ?? { x: world.map.width / 2, y: world.map.height / 2 };
+  return findSpot(world, { center: hub, radius: g.startRadius + g.radiusGrowthPerDay * clock(world).day });
 }
 
 /** Pick two different rewards for the week that just ended. */
@@ -100,9 +108,10 @@ export function chooseReward(world, rewardId) {
     return { ok: false, reason: "not-offered" };
   }
   const reward = world.data.rewards.find((r) => r.id === rewardId);
-  const grant = reward.grant;
-  if (grant.links) world.inventory.links += grant.links;
-  if (grant.capacity) world.bonus.capacity += grant.capacity;
+  for (const [key, amount] of Object.entries(reward.grant)) {
+    if (key === "capacity") world.bonus.capacity += amount;
+    else world.inventory[key] = (world.inventory[key] ?? 0) + amount;
+  }
   world.pendingReward = null;
   world.events.push({ type: "reward", rewardId });
   return { ok: true };

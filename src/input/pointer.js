@@ -8,6 +8,9 @@
  *   remove the link (refunded). Right-click or Delete also removes.
  * - Reroute: press on a link and drag it onto another site: A–B becomes
  *   A–C–B.
+ * - Equipment: drag an item from the tray onto its target (a link, a site,
+ *   or empty map), or tap the item and then tap the target.
+ * - Switches: tap a switch to select it; its × removes it.
  *
  * To make fast finger swipes reliable, every move is treated as a line
  * segment: any site the segment passes close to counts, in order, even if
@@ -15,7 +18,7 @@
  */
 import { distanceToPolyline } from "../sim/geometry.js";
 import { screenToWorld, worldToScreen } from "../render/camera.js";
-import { removeButtonPos, removeButtonRadius, siteRadiusPx } from "../render/renderer.js";
+import { removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemoveButtonPos } from "../render/renderer.js";
 
 /**
  * @param {HTMLCanvasElement} canvas
@@ -25,11 +28,13 @@ import { removeButtonPos, removeButtonRadius, siteRadiusPx } from "../render/ren
  * @param {object} opts.config       CONFIG.input
  * @param {object} opts.ui           Shared UI state the renderer reads.
  * @param {() => boolean} opts.canEdit  False while the game is over or a dialog is open.
- * @param {object} opts.actions      { connect(a, b, line), remove(linkId), reroute(linkId, siteId), lineFor(siteId) }
+ * @param {object} opts.actions      { connect(a, b, line), remove(linkId), reroute(linkId, siteId),
+ *                                    lineFor(siteId), removeSite(siteId), place(item, target) }
+ * @param {object} opts.items        ITEMS from equipment.js (what each tray item targets).
  * @param {(reason: string) => void} [opts.onRefused]
  */
 export function attachPointerInput(canvas, opts) {
-  const { getWorld, getCamera, config, ui, canEdit, actions, onRefused } = opts;
+  const { getWorld, getCamera, config, ui, canEdit, actions, onRefused, items } = opts;
   let last = null; // last pointer position (screen px) during a drawing drag
   let press = null; // a press on a link: { pointerId, linkId, start, touch }
   let lastPointerType = "mouse"; // contextmenu isn't a PointerEvent everywhere
@@ -76,13 +81,89 @@ export function attachPointerInput(canvas, opts) {
     return best;
   }
 
+  /** Is p on the × of the selected link or switch? Returns "link", "site" or null. */
   function onRemoveButton(p) {
     const world = getWorld();
-    const link = ui.selectedLinkId && world.linkById.get(ui.selectedLinkId);
-    if (!link) return false;
     const camera = getCamera();
-    const c = removeButtonPos(world, link, camera);
-    return Math.hypot(c.x - p.x, c.y - p.y) <= removeButtonRadius(camera) + 6;
+    const near = (c) => Math.hypot(c.x - p.x, c.y - p.y) <= removeButtonRadius(camera) + 6;
+    const link = ui.selectedLinkId && world.linkById.get(ui.selectedLinkId);
+    if (link && near(removeButtonPos(world, link, camera))) return "link";
+    const site = ui.selectedSiteId && world.siteById.get(ui.selectedSiteId);
+    if (site && near(siteRemoveButtonPos(world, site, camera))) return "site";
+    return null;
+  }
+
+  function clearSelection() {
+    ui.selectedLinkId = null;
+    ui.selectedSiteId = null;
+  }
+
+  /** What a tray item would land on at screen point p, or null. */
+  function dropTarget(item, p, touch) {
+    const kind = items[item]?.target;
+    const radius = touch ? config.touchDropRadius : config.mouseDropRadius;
+    if (kind === "link") {
+      const link = linkAt(p, radius);
+      return link ? { kind: "link", id: link.id } : null;
+    }
+    if (kind === "site") {
+      const site = siteAt(p, radius);
+      return site ? { kind: "site", id: site.id } : null;
+    }
+    if (kind === "map") {
+      if (siteAt(p, radius)) return null;
+      const link = linkAt(p, radius);
+      const w = screenToWorld(getCamera(), p.x, p.y);
+      return link ? { kind: "link", id: link.id, x: w.x, y: w.y } : { kind: "spot", x: w.x, y: w.y };
+    }
+    return null;
+  }
+
+  function applyPlacement(item, target) {
+    if (!target) return;
+    const result = actions.place(item, target);
+    if (!result.ok) refuse(result.reason);
+  }
+
+  /**
+   * Called by the HUD when a tray item is pressed. Dragging it onto the
+   * map drops it there; a tap arms it, and the next tap on the map uses it.
+   */
+  function startPlacement(item, e) {
+    if (!canEdit() || !items[item]?.target) return;
+    e.preventDefault();
+    clearSelection();
+    const touch = isTouch(e);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    ui.place = { item, target: null, pointerWorld: null, dragging: false };
+    const move = (ev) => {
+      if (ev.pointerId !== e.pointerId || !ui.place) return;
+      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > config.dragThreshold) ui.place.dragging = true;
+      if (!ui.place.dragging) return;
+      const p = local(ev);
+      ui.place.pointerWorld = screenToWorld(getCamera(), p.x, p.y);
+      ui.place.target = dropTarget(item, p, touch);
+    };
+    const up = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      const place = ui.place;
+      ui.place = null;
+      if (!place) return;
+      if (!place.dragging) {
+        // A tap: arm it (or disarm if it was already armed).
+        ui.armed = ui.armed === item ? null : item;
+        return;
+      }
+      ui.armed = null;
+      if (ev.type === "pointerup" && canEdit()) applyPlacement(item, dropTarget(item, local(ev), touch));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
 
   /** Sites the segment p0→p1 passes within `radius` px of, in travel order. */
@@ -116,10 +197,21 @@ export function attachPointerInput(canvas, opts) {
     const p = local(e);
     const touch = isTouch(e);
 
-    if (onRemoveButton(p)) {
+    if (ui.armed) {
       e.preventDefault();
-      actions.remove(ui.selectedLinkId);
-      ui.selectedLinkId = null;
+      const item = ui.armed;
+      ui.armed = null;
+      const target = dropTarget(item, p, touch);
+      if (target) applyPlacement(item, target);
+      return;
+    }
+
+    const button = onRemoveButton(p);
+    if (button) {
+      e.preventDefault();
+      if (button === "link") actions.remove(ui.selectedLinkId);
+      else actions.removeSite(ui.selectedSiteId);
+      clearSelection();
       return;
     }
 
@@ -127,8 +219,13 @@ export function attachPointerInput(canvas, opts) {
     if (site) {
       e.preventDefault();
       canvas.setPointerCapture?.(e.pointerId);
-      ui.selectedLinkId = null;
+      const wasSelected = ui.selectedSiteId === site.id;
+      clearSelection();
       ui.drag = {
+        startSiteId: site.id,
+        start: p,
+        moved: false,
+        wasSelected,
         pointerId: e.pointerId,
         touch,
         fromSiteId: site.id,
@@ -149,7 +246,7 @@ export function attachPointerInput(canvas, opts) {
       return;
     }
 
-    ui.selectedLinkId = null;
+    clearSelection();
   }
 
   function onMove(e) {
@@ -158,7 +255,7 @@ export function attachPointerInput(canvas, opts) {
       e.preventDefault();
       if (!ui.reroute && Math.hypot(p.x - press.start.x, p.y - press.start.y) > config.dragThreshold) {
         ui.reroute = { linkId: press.linkId, pointerWorld: null, overSiteId: null };
-        ui.selectedLinkId = null;
+        clearSelection();
       }
       if (ui.reroute) {
         ui.reroute.pointerWorld = screenToWorld(getCamera(), p.x, p.y);
@@ -184,6 +281,7 @@ export function attachPointerInput(canvas, opts) {
       ui.drag = null;
       return;
     }
+    if (Math.hypot(p.x - drag.start.x, p.y - drag.start.y) > config.dragThreshold) drag.moved = true;
     const points = e.getCoalescedEvents?.().map(local) ?? [];
     if (points.length === 0) points.push(p);
     const radius = drag.touch ? config.touchConnectRadius : config.mouseConnectRadius;
@@ -214,24 +312,41 @@ export function attachPointerInput(canvas, opts) {
         ui.reroute = null;
       } else if (e.type === "pointerup") {
         // A tap: toggle selection.
-        ui.selectedLinkId = ui.selectedLinkId === press.linkId ? null : press.linkId;
+        const was = ui.selectedLinkId === press.linkId;
+        clearSelection();
+        ui.selectedLinkId = was ? null : press.linkId;
       }
       press = null;
       return;
     }
     if (!ui.drag || e.pointerId !== ui.drag.pointerId) return;
+    const drag = ui.drag;
     ui.drag = null;
     last = null;
+    // A tap on a switch selects it (tap again to deselect).
+    const world = getWorld();
+    const site = world.siteById.get(drag.startSiteId);
+    if (e.type === "pointerup" && !drag.moved && site && world.data.sites[site.type].junction) {
+      ui.selectedSiteId = drag.wasSelected ? null : site.id;
+    }
   }
 
   function onContextMenu(e) {
     // Right-click a link to remove it. Always stop long-press menus.
     e.preventDefault();
     if (lastPointerType !== "mouse" || !canEdit()) return;
-    const link = linkAt(local(e), config.mouseLinkRadius);
+    const p = local(e);
+    const site = siteAt(p, config.mouseGrabRadius);
+    const world = getWorld();
+    if (site && world.data.sites[site.type].junction) {
+      actions.removeSite(site.id);
+      clearSelection();
+      return;
+    }
+    const link = linkAt(p, config.mouseLinkRadius);
     if (link) {
       actions.remove(link.id);
-      if (ui.selectedLinkId === link.id) ui.selectedLinkId = null;
+      clearSelection();
     }
   }
 
@@ -245,17 +360,20 @@ export function attachPointerInput(canvas, opts) {
   canvas.addEventListener("contextmenu", onContextMenu);
 
   return {
-    /** Remove the selected link (Delete key). */
+    startPlacement,
+    /** Remove the selected link or switch (Delete key). */
     removeSelected() {
-      if (ui.selectedLinkId && canEdit()) {
-        actions.remove(ui.selectedLinkId);
-        ui.selectedLinkId = null;
-      }
+      if (!canEdit()) return;
+      if (ui.selectedLinkId) actions.remove(ui.selectedLinkId);
+      else if (ui.selectedSiteId) actions.removeSite(ui.selectedSiteId);
+      clearSelection();
     },
     /** Drop any in-progress gesture (e.g. when a dialog opens). */
     cancel() {
       ui.drag = null;
       ui.reroute = null;
+      ui.place = null;
+      ui.armed = null;
       press = null;
       last = null;
     },

@@ -24,7 +24,13 @@ export function describeSurvival(days) {
   return rest === 0 ? plural(weeks, "week") : `${plural(weeks, "week")}, ${plural(rest, "day")}`;
 }
 
-export function createHud(root, { onPause, onSpeed, onReward, onRestart, speeds }) {
+/**
+ * @param {HTMLElement} root
+ * @param {object} opts
+ * @param {object} opts.items  ITEMS from equipment.js, in tray order.
+ * @param {(item: string, e: PointerEvent) => void} opts.onItemPointerDown
+ */
+export function createHud(root, { onPause, onSpeed, onReward, onRestart, onItemPointerDown, speeds, items }) {
   root.innerHTML = `
     <div class="hud-top">
       <div class="hud-left">
@@ -47,13 +53,23 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, speeds 
           .join("")}
       </div>
     </div>
-    <div class="hud-tray">
-      <div class="tray-item" data-hud="links" title="Links left">
-        <span class="tray-icon tray-icon-link"></span>
-        <span class="tray-count" data-hud="links-count">0</span>
-      </div>
+    <div class="hud-tray" data-hud="tray">
+      ${Object.entries(items)
+        .map(
+          ([id, item]) => `
+        <button type="button" class="tray-item" data-item="${id}" title="${escapeHtml(`${item.name}: ${item.hint}`)}"
+          aria-label="${escapeHtml(item.name)}" ${item.target ? "" : 'tabindex="-1"'}>
+          <span class="tray-icon tray-icon-${id}" aria-hidden="true"></span>
+          <span class="tray-count" data-count="${id}">0</span>
+        </button>`,
+        )
+        .join("")}
     </div>
+    <div class="hud-hint" data-hud="hint" role="status"></div>
     <div class="hud-toast" data-hud="toast" role="status"></div>
+    <div class="hud-ticker" data-hud="ticker" role="status" aria-live="polite">
+      <strong data-hud="ticker-title"></strong><span data-hud="ticker-text"></span>
+    </div>
     <div class="overlay" data-hud="reward" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="reward-title">
         <p class="card-kicker" data-hud="reward-kicker">Week 1 done</p>
@@ -79,7 +95,10 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, speeds 
     score: q("score"),
     clockText: q("clock-text"),
     dial: q("dial"),
-    links: q("links-count"),
+    hint: q("hint"),
+    ticker: q("ticker"),
+    tickerTitle: q("ticker-title"),
+    tickerText: q("ticker-text"),
     pause: q("pause"),
     toast: q("toast"),
     reward: q("reward"),
@@ -93,6 +112,19 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, speeds 
     restart: q("restart"),
   };
   const speedBtns = [...root.querySelectorAll("[data-speed]")];
+  const trayItems = [...root.querySelectorAll("[data-item]")];
+  const counts = Object.fromEntries(trayItems.map((b) => [b.dataset.item, b.querySelector("[data-count]")]));
+
+  for (const b of trayItems) {
+    b.addEventListener("pointerdown", (e) => {
+      if (b.disabled) return;
+      onItemPointerDown(b.dataset.item, e);
+    });
+    // Keyboard: Enter/Space arms the item, like a tap.
+    b.addEventListener("click", (e) => {
+      if (e.detail === 0 && !b.disabled) onItemPointerDown(b.dataset.item, null);
+    });
+  }
 
   el.pause.addEventListener("click", () => onPause());
   for (const b of speedBtns) b.addEventListener("click", () => onSpeed(Number(b.dataset.speed)));
@@ -103,17 +135,36 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, speeds 
   });
 
   let toastTimer = 0;
-  const shown = { score: -1, links: -1, paused: null, speed: null, clock: "", dial: -1, reward: null, over: null };
+  let tickerTimer = 0;
+  const shown = { score: -1, paused: null, speed: null, clock: "", dial: -1, reward: null, over: null, armed: null, inv: {} };
 
   return {
-    update(world, loop) {
+    update(world, loop, ui) {
       if (shown.score !== world.stats.score) {
         shown.score = world.stats.score;
         el.score.textContent = String(world.stats.score);
       }
-      if (shown.links !== world.inventory.links) {
-        shown.links = world.inventory.links;
-        el.links.textContent = String(world.inventory.links);
+      for (const b of trayItems) {
+        const id = b.dataset.item;
+        const n = world.inventory[id] ?? 0;
+        if (shown.inv[id] !== n) {
+          shown.inv[id] = n;
+          counts[id].textContent = String(n);
+          b.classList.toggle("empty", n === 0);
+          // Firewalls only show up once they matter; everything else always shows.
+          b.hidden = id === "firewalls" && n === 0 && !world.security;
+          if (items[id].target) b.disabled = n === 0;
+        }
+      }
+      const armed = ui.armed ?? ui.place?.item ?? null;
+      if (armed !== shown.armed) {
+        shown.armed = armed;
+        for (const b of trayItems) b.classList.toggle("armed", b.dataset.item === armed);
+        el.hint.textContent = armed ? items[armed].hint : "";
+        el.hint.classList.toggle("show", Boolean(armed));
+      }
+      for (const e of world.events) {
+        if (e.type === "event") this.ticker(e.name, e.toast);
       }
       const c = clock(world);
       const text = `Week ${c.week} · ${dayName(c.dayOfWeek)}`;
@@ -167,6 +218,14 @@ export function createHud(root, { onPause, onSpeed, onReward, onRestart, speeds 
           el.restart.focus();
         }
       }
+    },
+    /** A short headline for an event, shown at the top for a few seconds. */
+    ticker(title, text) {
+      el.tickerTitle.textContent = title;
+      el.tickerText.textContent = text;
+      el.ticker.classList.add("show");
+      clearTimeout(tickerTimer);
+      tickerTimer = setTimeout(() => el.ticker.classList.remove("show"), 5500);
     },
     toast(text) {
       el.toast.textContent = text;

@@ -3,13 +3,15 @@
  * something that exists. Returns a list of human-readable problems (empty
  * when all is well). Used by the tests, and at startup in the browser.
  */
-const SITE_SHAPES = ["hub", "circle", "square", "triangle"];
+const SITE_SHAPES = ["hub", "circle", "square", "triangle", "cloud", "edge", "switch"];
 const PACKET_SHAPES = ["circle", "square", "triangle", "diamond"];
+const HOURS = ["any", "day", "night"];
+const SCHEDULE_KEYS = ["day", "every", "weekday", "fromWeek"];
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const isPos = (v) => isNum(v) && v > 0;
 
-export function validateData({ config, sites, traffic, maps, rewards, rewardGrants }) {
+export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects }) {
   const errors = [];
   const err = (msg) => errors.push(msg);
 
@@ -56,7 +58,15 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     if (!PACKET_SHAPES.includes(t.shape)) err(`${at}.shape "${t.shape}" must be one of ${PACKET_SHAPES.join(", ")}`);
     if (!isPos(t.size)) err(`${at}.size must be > 0`);
     if (!isNum(t.points)) err(`${at}.points must be a number`);
-    if (!sites?.[t.to]) err(`${at}.to "${t.to}" is not a site type`);
+    const dests = Array.isArray(t.to) ? t.to : [t.to];
+    if (dests.length === 0) err(`${at}.to is empty`);
+    if (t.to !== "site") {
+      for (const d of dests) if (!sites?.[d]) err(`${at}.to "${d}" is not a site type`);
+    }
+    if (!Number.isInteger(t.unlockDay) || t.unlockDay < 0) err(`${at}.unlockDay must be a whole number ≥ 0`);
+    if (!HOURS.includes(t.hours)) err(`${at}.hours must be one of ${HOURS.join(", ")}`);
+    if (t.maxHops !== undefined && (!Number.isInteger(t.maxHops) || t.maxHops < 1)) err(`${at}.maxHops must be a whole number ≥ 1`);
+    if (t.dropPoints !== undefined && !isNum(t.dropPoints)) err(`${at}.dropPoints must be a number`);
   }
 
   // Site types.
@@ -78,8 +88,72 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     if (s.packetInterval !== null && weights.length === 0) err(`${at} creates packets but has no traffic`);
     for (const [tid, w] of weights) {
       if (!traffic?.[tid]) err(`${at}.traffic references unknown traffic type "${tid}"`);
+      else if (traffic[tid].to === "site" || traffic[tid].junk) err(`${at}.traffic: "${tid}" is only sent by events`);
       if (!isPos(w)) err(`${at}.traffic.${tid} weight must be > 0`);
     }
+    if (!s.activity || !(isNum(s.activity.day) && s.activity.day >= 0) || !(isNum(s.activity.night) && s.activity.night >= 0)) {
+      err(`${at}.activity needs day and night multipliers ≥ 0`);
+    }
+    if (s.burst !== null) {
+      const b = s.burst ?? {};
+      if (!(isNum(b.chance) && b.chance >= 0 && b.chance <= 1) || !Number.isInteger(b.min) || !Number.isInteger(b.max) || b.min < 1 || b.min > b.max) {
+        err(`${at}.burst must be null or { chance 0–1, min ≥ 1, max ≥ min }`);
+      }
+    }
+    if (!Number.isInteger(s.unlockDay) || s.unlockDay < 0) err(`${at}.unlockDay must be a whole number ≥ 0`);
+  }
+  if (!Object.values(sites ?? {}).some((s) => s.shape === "hub")) err("sites needs a hub-shaped site type (the data center)");
+  if (!Object.values(sites ?? {}).some((s) => s.junction)) err("sites needs a junction site type (the switch)");
+
+  // Equipment.
+  if (!Array.isArray(tiers) || tiers.length === 0) err("tiers must list at least one link tier");
+  for (const [i, t] of (tiers ?? []).entries()) {
+    if (typeof t.name !== "string" || !t.name) err(`tiers[${i}].name is missing`);
+    if (!isPos(t.bandwidth) || !isPos(t.width)) err(`tiers[${i}] needs bandwidth and width > 0`);
+    if (i > 0 && t.bandwidth <= tiers[i - 1].bandwidth) err(`tiers[${i}] must be faster than the tier before it`);
+  }
+  const itemIds = Object.keys(items ?? {});
+  for (const [id, item] of Object.entries(items ?? {})) {
+    if (typeof item.name !== "string" || typeof item.hint !== "string") err(`items.${id} needs a name and a hint`);
+    if (![null, "link", "site", "map"].includes(item.target)) err(`items.${id}.target must be link, site, map or null`);
+  }
+  for (const k of Object.keys(config?.inventory ?? {})) {
+    if (!itemIds.includes(k)) err(`config.inventory.${k} is not an item in equipment.js`);
+  }
+  for (const k of rewardGrants ?? []) {
+    if (k !== "capacity" && !itemIds.includes(k)) err(`reward grant "${k}" is not an item in equipment.js`);
+  }
+
+  // Events.
+  const eventIds = new Set();
+  for (const [i, ev] of (events ?? []).entries()) {
+    const at = `events[${i}] (${ev.id ?? "no id"})`;
+    if (typeof ev.id !== "string" || !ev.id) err(`${at}.id is missing`);
+    else if (eventIds.has(ev.id)) err(`${at}.id is a duplicate`);
+    eventIds.add(ev.id);
+    if (typeof ev.name !== "string" || !ev.name) err(`${at}.name is missing`);
+    if (!Array.isArray(ev.toasts) || ev.toasts.length === 0 || !ev.toasts.every((t) => typeof t === "string" && t)) {
+      err(`${at}.toasts needs at least one line`);
+    }
+    if (effects && !effects.includes(ev.effect)) err(`${at}.effect "${ev.effect}" is not one of ${effects.join(", ")}`);
+    if (!(isNum(ev.duration) && ev.duration >= 0)) err(`${at}.duration must be ≥ 0`);
+    const sch = ev.schedule ?? {};
+    for (const k of Object.keys(sch)) if (!SCHEDULE_KEYS.includes(k)) err(`${at}.schedule has unknown key "${k}"`);
+    if (sch.weekday !== undefined) {
+      if (!Number.isInteger(sch.weekday) || sch.weekday < 0 || sch.weekday >= (config?.time?.daysPerWeek ?? 7)) err(`${at}.schedule.weekday is out of range`);
+    } else if (!Number.isInteger(sch.day) || sch.day < 0) {
+      err(`${at}.schedule needs a day (or a weekday)`);
+    }
+    if (sch.every !== undefined) {
+      const [a, b] = Array.isArray(sch.every) ? sch.every : [];
+      if (!Number.isInteger(a) || !Number.isInteger(b) || a < 1 || a > b) err(`${at}.schedule.every must be [min, max] days, 1 ≤ min ≤ max`);
+    }
+    const p = ev.params ?? {};
+    if (p.traffic !== undefined && !traffic?.[p.traffic]) err(`${at}.params.traffic "${p.traffic}" is not a traffic type`);
+    if (ev.effect === "broadcast" && traffic?.[p.traffic]?.to !== "site") err(`${at}: broadcast traffic must have to: "site"`);
+    if (ev.effect === "ddos" && !traffic?.[p.traffic]?.junk) err(`${at}: ddos traffic must be junk`);
+    for (const t of Object.keys(p.types ?? {})) if (!sites?.[t]) err(`${at}.params.types references unknown site type "${t}"`);
+    for (const k of Object.keys(p.grant ?? {})) if (!itemIds.includes(k)) err(`${at}.params.grant "${k}" is not an item`);
   }
 
   // Maps.
@@ -102,13 +176,14 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
         err(`${at}.start[${j}] is outside the map`);
       }
     }
-    // Every traffic type the starting sites send must have a destination on the map.
+    // Every starting site that sends traffic must have somewhere to send it
+    // on day 0 (other destinations can arrive later through events).
     const types = new Set(m.start.map((s) => s.type));
     for (const t of types) {
-      for (const tid of Object.keys(sites?.[t]?.traffic ?? {})) {
-        const dest = traffic?.[tid]?.to;
-        if (dest && !types.has(dest)) err(`${at}: "${t}" sends ${tid} to "${dest}", but the map starts with none`);
-      }
+      const sends = Object.keys(sites?.[t]?.traffic ?? {}).map((tid) => traffic?.[tid]).filter(Boolean);
+      if (sends.length === 0) continue;
+      const ok = sends.some((tr) => tr.unlockDay === 0 && (Array.isArray(tr.to) ? tr.to : [tr.to]).some((d) => types.has(d)));
+      if (!ok) err(`${at}: "${t}" has no traffic with a destination on the map on day 0`);
     }
     const spacing = config?.sites?.minSpacing ?? 0;
     for (let a = 0; a < m.start.length; a++) {

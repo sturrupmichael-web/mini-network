@@ -18,6 +18,17 @@ export const THEME = {
     removeFill: "#2b2b2b",
     removeText: "#ffffff",
     dim: "rgba(246, 244, 239, 0.55)",
+    /** The background at the darkest point of the night. */
+    nightBackground: "#e3e1dc",
+    down: "#e8483f",
+    blocked: "#f2994a",
+    firewall: "#f2994a",
+    sdwan: "#13a8b5",
+    leasedStripe: "#ffffff",
+    switchFill: "#2b2b2b",
+    edgeFill: "#2b2b2b",
+    cloudFill: "#ffffff",
+    dropTarget: "rgba(47, 128, 237, 0.25)",
   },
   /**
    * Colours for links. Each drag gesture draws in the next colour, so the

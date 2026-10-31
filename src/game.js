@@ -2,7 +2,7 @@
  * Wires the pieces together: simulation, loop, renderer, input, and HUD.
  * This is the only module that knows about all of them.
  */
-import { GAME_DATA } from "../data/index.js";
+import { GAME_DATA, SIM_DATA } from "../data/index.js";
 import { attachPointerInput } from "./input/pointer.js";
 import { createLoop } from "./loop.js";
 import { createCamera, fitCamera, worldToScreen } from "./render/camera.js";
@@ -10,14 +10,40 @@ import { setupCanvas } from "./render/canvas.js";
 import { render } from "./render/renderer.js";
 import { pointAlong } from "./sim/geometry.js";
 import { chooseReward } from "./sim/progression.js";
-import { addLink, createWorld, isHalted, removeLink, rerouteLink, snapshot, step } from "./sim/world.js";
+import {
+  addFirewall,
+  addLink,
+  addSdwan,
+  createWorld,
+  isHalted,
+  placeSwitch,
+  placeSwitchOnLink,
+  removeLink,
+  removeSwitch,
+  rerouteLink,
+  snapshot,
+  step,
+  triggerEvent,
+  upgradeLink,
+} from "./sim/world.js";
 import { createStorage } from "./storage.js";
 import { createHud } from "./ui/hud.js";
 
 const CONFIG = GAME_DATA.config;
 
 const REFUSED_TEXT = {
-  "no-links": "Out of links. More arrive each week.",
+  "no-links": "Out of links. One arrives each day.",
+  "no-leased": "Crossing a carrier boundary needs a leased line.",
+  "no-upgrades": "No bandwidth upgrades left.",
+  "max-tier": "That link is already dark fiber.",
+  "no-firewalls": "No firewalls left.",
+  "has-firewall": "That link already has a firewall.",
+  "no-switches": "No switches left.",
+  "too-close": "Too close to another site.",
+  "off-map": "That's off the map.",
+  "on-boundary": "Switches can't sit on a carrier boundary.",
+  "no-sdwan": "No SD-WAN boxes left.",
+  "has-sdwan": "That site already has SD-WAN.",
 };
 
 /**
@@ -30,12 +56,20 @@ const REFUSED_TEXT = {
 export function startGame({ canvas, hudRoot, seed, newSeed = () => seed }) {
   const storage = createStorage();
   const settings = storage.get("settings", { speed: 1 });
-  const data = { sites: GAME_DATA.sites, traffic: GAME_DATA.traffic, rewards: GAME_DATA.rewards };
+  const data = SIM_DATA;
   const map = GAME_DATA.maps[0];
   let currentSeed = seed;
   let world = createWorld({ config: CONFIG, data, map, seed });
   const camera = createCamera();
-  const ui = { drag: null, reroute: null, selectedLinkId: null, hoverSiteId: null };
+  const ui = {
+    drag: null,
+    reroute: null,
+    place: null,
+    armed: null,
+    selectedLinkId: null,
+    selectedSiteId: null,
+    hoverSiteId: null,
+  };
   let nextLineIndex = 0;
 
   const view = setupCanvas(canvas, (v) => fit(v));
@@ -54,11 +88,11 @@ export function startGame({ canvas, hudRoot, seed, newSeed = () => seed }) {
     maxTicksPerFrame: CONFIG.sim.maxTicksPerFrame,
     onTick: () => step(world),
     onRender: () => {
-      // Events are for audio/effects (later phases); drop them each frame.
-      world.events.length = 0;
       if (isHalted(world)) input.cancel();
       render(view.ctx, view, world, camera, ui, performance.now() / 1000);
-      hud.update(world, loop);
+      hud.update(world, loop, ui);
+      // Events have been seen by the HUD (audio joins in Phase 4); clear them.
+      world.events.length = 0;
     },
   });
   loop.speed = CONFIG.sim.speeds.includes(settings.speed) ? settings.speed : 1;
@@ -88,6 +122,7 @@ export function startGame({ canvas, hudRoot, seed, newSeed = () => seed }) {
     world = createWorld({ config: CONFIG, data, map, seed: currentSeed });
     input.cancel();
     ui.selectedLinkId = null;
+    ui.selectedSiteId = null;
     nextLineIndex = 0;
     loop.paused = false;
   }
@@ -97,8 +132,23 @@ export function startGame({ canvas, hudRoot, seed, newSeed = () => seed }) {
     onSpeed: setSpeed,
     onReward: (id) => chooseReward(world, id),
     onRestart: restart,
+    onItemPointerDown: (item, e) => {
+      if (e) input.startPlacement(item, e);
+      else ui.armed = ui.armed === item ? null : item; // keyboard
+    },
     speeds: CONFIG.sim.speeds,
+    items: GAME_DATA.items,
   });
+
+  /** Use a tray item on what it was dropped on. */
+  function place(item, target) {
+    if (item === "upgrades" && target.kind === "link") return upgradeLink(world, target.id);
+    if (item === "firewalls" && target.kind === "link") return addFirewall(world, target.id);
+    if (item === "sdwan" && target.kind === "site") return addSdwan(world, target.id);
+    if (item === "switches" && target.kind === "link") return placeSwitchOnLink(world, target.id, target.x, target.y);
+    if (item === "switches" && target.kind === "spot") return placeSwitch(world, target.x, target.y);
+    return { ok: false, reason: "bad-target" };
+  }
 
   const input = attachPointerInput(canvas, {
     getWorld: () => world,
@@ -110,8 +160,11 @@ export function startGame({ canvas, hudRoot, seed, newSeed = () => seed }) {
       connect: (a, b, line) => addLink(world, a, b, line),
       remove: (linkId) => removeLink(world, linkId),
       reroute: (linkId, siteId) => rerouteLink(world, linkId, siteId),
+      removeSite: (siteId) => removeSwitch(world, siteId),
+      place,
       lineFor,
     },
+    items: GAME_DATA.items,
     onRefused: (reason) => REFUSED_TEXT[reason] && hud.toast(REFUSED_TEXT[reason]),
   });
 
@@ -127,6 +180,8 @@ export function startGame({ canvas, hudRoot, seed, newSeed = () => seed }) {
       input.removeSelected();
     } else if (e.key === "Escape") {
       ui.selectedLinkId = null;
+      ui.selectedSiteId = null;
+      ui.armed = null;
     }
   });
 
@@ -164,6 +219,10 @@ export function startGame({ canvas, hudRoot, seed, newSeed = () => seed }) {
       for (let i = 0; i < n && !isHalted(world); i++) step(world);
     },
     snapshot: () => snapshot(world),
+    /** Start an event now, by id (tests and the Phase 5 debug panel). */
+    triggerEvent: (id) => triggerEvent(world, id),
+    /** Use a tray item on a target, as if dropped there (tests). */
+    place,
     restart,
   };
 }

@@ -65,3 +65,37 @@ export function distanceToPolyline(p, points) {
   for (let i = 1; i < points.length; i++) best = Math.min(best, distanceToSegment(p, points[i - 1], points[i]));
   return best;
 }
+
+/** Do segments p1–p2 and p3–p4 cross (touching counts)? */
+export function segmentsIntersect(p1, p2, p3, p4) {
+  const d = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const d1 = d(p3, p4, p1);
+  const d2 = d(p3, p4, p2);
+  const d3 = d(p1, p2, p3);
+  const d4 = d(p1, p2, p4);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+  const on = (a, b, c) =>
+    Math.min(a.x, b.x) - 1e-9 <= c.x && c.x <= Math.max(a.x, b.x) + 1e-9 && Math.min(a.y, b.y) - 1e-9 <= c.y && c.y <= Math.max(a.y, b.y) + 1e-9;
+  return (
+    (d1 === 0 && on(p3, p4, p1)) || (d2 === 0 && on(p3, p4, p2)) || (d3 === 0 && on(p1, p2, p3)) || (d4 === 0 && on(p1, p2, p4))
+  );
+}
+
+/** The closest point on a polyline to p, and how far along the polyline it is. */
+export function closestPointOnPath(points, p) {
+  let best = { point: points[0], along: 0, distance: Infinity };
+  let travelled = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+    const point = { x: a.x + dx * t, y: a.y + dy * t };
+    const distance = Math.hypot(point.x - p.x, point.y - p.y);
+    if (distance < best.distance) best = { point, along: travelled + Math.sqrt(len2) * t, distance };
+    travelled += Math.sqrt(len2);
+  }
+  return best;
+}

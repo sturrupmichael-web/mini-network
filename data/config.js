@@ -39,12 +39,55 @@ export const CONFIG = {
      */
     perDay: 1,
     /**
-     * Base bandwidth: how many size-1 packets per second a link can start
-     * sending in each direction. A packet of size 2 uses twice the time.
+     * Base bandwidth: how many size-1 packets per second a Copper link can
+     * start sending in each direction. A packet of size 2 uses twice the
+     * time. Higher tiers multiply this (see LINK_TIERS in equipment.js).
      */
     bandwidth: 2,
     /** How fast packets travel along a link, in world units per second. */
     packetSpeed: 140,
+  },
+
+  /**
+   * Equipment in the inventory at the start of a game (links are above).
+   * Names and what each one does are in equipment.js.
+   */
+  inventory: {
+    upgrades: 2,
+    switches: 1,
+    firewalls: 0,
+    sdwan: 0,
+    leased: 1,
+  },
+
+  switches: {
+    /** Closest a switch may be placed to any site or other switch (wu). */
+    minSpacing: 55,
+  },
+
+  failover: {
+    /**
+     * When a link is cut, sites with an SD-WAN box reroute at once. Every
+     * other site keeps sending into the dead link until the network
+     * "converges" this many seconds later.
+     */
+    convergenceSeconds: 12,
+  },
+
+  drops: {
+    /**
+     * When a packet is dropped (a VoIP or payment packet that took too many
+     * hops), the site it was dropped at gets this many seconds added to its
+     * overload ring.
+     */
+    overloadPenalty: 1.5,
+  },
+
+  dayNight: {
+    /** Night starts at this fraction of the day (0 = midnight, 0.5 = noon)... */
+    nightStart: 0.8,
+    /** ...and ends at this fraction. */
+    nightEnd: 0.2,
   },
 
   routing: {
@@ -82,6 +125,12 @@ export const CONFIG = {
     weeklyIntervalMultiplier: 0.9,
     /** ...but never below this fraction of the original interval. */
     minIntervalScale: 0.35,
+    /**
+     * When a new kind of destination appears (an internet edge, a cloud
+     * region), sites wait this many seconds before sending traffic to it,
+     * so you have time to connect it.
+     */
+    newDestinationDelay: 20,
   },
 
   sites: {
@@ -110,8 +159,11 @@ export const CONFIG = {
     radiusGrowthPerDay: 60,
     /** Random spots tried per new site before giving up until next time. */
     attempts: 60,
-    /** Relative odds of each site type for new sites (ids from sites.js). */
-    types: { office: 1 },
+    /**
+     * Relative odds of each site type for new sites (ids from sites.js).
+     * A type only appears once its unlockDay (in sites.js) has passed.
+     */
+    types: { office: 5, warehouse: 2, retail: 2 },
   },
 
   overload: {
@@ -151,6 +203,9 @@ export const CONFIG = {
     touchLinkRadius: 18,
     /** How far (px) a press on a link must move before it becomes a reroute drag. */
     dragThreshold: 8,
+    /** How close (px) a dropped tray item must land to a link or site to apply to it. */
+    mouseDropRadius: 16,
+    touchDropRadius: 30,
   },
 
   view: {

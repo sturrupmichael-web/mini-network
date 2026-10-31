@@ -4,6 +4,7 @@
  */
 import { GAME_DATA } from "../data/index.js";
 import { validateData } from "./data/validate.js";
+import { EFFECT_NAMES } from "./sim/events.js";
 import { startGame } from "./game.js";
 
 const urlSeed = new URLSearchParams(location.search).get("seed");
@@ -14,7 +15,7 @@ function randomSeed() {
   return n[0].toString(36);
 }
 
-const problems = validateData(GAME_DATA);
+const problems = validateData({ ...GAME_DATA, effects: EFFECT_NAMES });
 if (problems.length) {
   // Bad data is a developer mistake: say exactly what's wrong.
   console.warn(`Mini Network data problems:\n${problems.join("\n")}`);
