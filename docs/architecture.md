@@ -19,7 +19,8 @@ data/ (content + balance)       src/
                   │   │            events.js    event schedule and effects
                   │   │            progression.js  clock, new sites, traffic growth, rewards
                   │   │            geometry.js  45°/90° metro paths, points along a path
-                  │   │            grid.js      the link grid: squares, routes, costs
+                  │   │            grid.js      the link grid: squares, routes, costs, terrain
+                  │   │            view.js      the open part of the map, growing with each site
                   │   │          loop.js      fixed-timestep loop: pause, 1×/2×
                   │   │          rng.js       seeded RNG (all gameplay randomness)
                   │   │          storage.js   localStorage wrapper ("miniNetwork:" keys)
@@ -193,6 +194,24 @@ neighbouring link with the lowest
               + far site's cost to the destination
 
 It avoids going straight back where it came from unless that's the only way.
+
+## Terrain and the growing map
+
+- **Terrain** (`map.terrain`, kinds in `data/terrain.js`): polygons; every
+  grid square whose centre is inside one is blocked (`world.terrain`, a
+  Map from cell key to kind, built once in `createWorld`). Links can't
+  cross those squares, switches can't go on them, and new sites keep a
+  square away. The validator checks starting sites are clear.
+- **The open area** (`world.view`, `sim/view.js`): starts at
+  `growth.viewStart` of the map around HQ and grows by `growth.viewPerSite`
+  per added site; it always includes every site plus `growth.viewPadding`,
+  and never shrinks. New sites, links and switches stay inside it, except
+  acquisitions, which can land in a far corner and pull the area open.
+- **Camera**: `fitCamera(…, rect)` fits a part of the map; whether it
+  turns 90° depends only on the whole map. `game.js` eases the shown rect
+  towards `world.view` each frame (`view.zoomSpeed`), so it zooms out
+  smoothly; `settleCamera()` jumps there (tests, screenshots). The renderer
+  shades everything outside `world.view`.
 
 ## Links and the grid
 

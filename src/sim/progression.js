@@ -4,7 +4,16 @@
  */
 import { scheduleDay } from "./events.js";
 import { distanceToPolyline } from "./geometry.js";
-import { snapToGrid } from "./grid.js";
+import { cellOf, inView, isTerrain, snapToGrid } from "./grid.js";
+
+/** Is (x, y) on terrain or right next to it (a site needs room for its links)? */
+function nearTerrain(world, x, y) {
+  const c = cellOf(world, x, y);
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) if (isTerrain(world, { cx: c.cx + dx, cy: c.cy + dy })) return true;
+  }
+  return false;
+}
 import { addSite, hubSite } from "./sites.js";
 
 /** Day number (0-based), week (1-based), day of week (0 = Mon) and fraction through the day. */
@@ -63,16 +72,23 @@ export function updateProgression(world) {
 
 /**
  * A random valid spot for a new site within `radius` of `center`, or null.
- * Valid: inside the edge margin, at least minSpacing from every site, and
- * clear of carrier boundaries and of every link.
+ * Valid: inside the edge margin and the open part of the map (unless
+ * `anywhere`), at least minSpacing from every site, and clear of carrier
+ * boundaries, terrain and every link.
  */
-export function findSpot(world, { center, radius }) {
+export function findSpot(world, { center, radius, anywhere = false }) {
   const { map, config } = world;
   const { edgeMargin, minSpacing, boundaryClearance, linkClearance = 0 } = config.sites;
   const boundaries = (map.boundaries ?? []).map((b) => b.map(([x, y]) => ({ x, y })));
   for (let i = 0; i < config.growth.attempts; i++) {
-    const { x, y } = snapToGrid(world, world.rng.range(edgeMargin, map.width - edgeMargin), world.rng.range(edgeMargin, map.height - edgeMargin));
+    const v = (!anywhere && world.view) || { x: 0, y: 0, width: map.width, height: map.height };
+    const { x, y } = snapToGrid(
+      world,
+      world.rng.range(Math.max(edgeMargin, v.x), Math.min(map.width - edgeMargin, v.x + v.width)),
+      world.rng.range(Math.max(edgeMargin, v.y), Math.min(map.height - edgeMargin, v.y + v.height)),
+    );
     if (x < edgeMargin || y < edgeMargin || x > map.width - edgeMargin || y > map.height - edgeMargin) continue;
+    if ((!anywhere && !inView(world, x, y)) || nearTerrain(world, x, y)) continue;
     if (Math.hypot(x - center.x, y - center.y) > radius) continue;
     if (world.sites.some((s) => Math.hypot(s.x - x, s.y - y) < minSpacing)) continue;
     const p = { x, y };

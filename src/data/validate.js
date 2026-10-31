@@ -11,7 +11,17 @@ const SCHEDULE_KEYS = ["day", "every", "weekday", "fromWeek"];
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const isPos = (v) => isNum(v) && v > 0;
 
-export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects, modes, audio }) {
+function pointInPolygon(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects, modes, audio, terrain }) {
   const errors = [];
   const err = (msg) => errors.push(msg);
 
@@ -206,6 +216,26 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
       for (const [k, v] of Object.entries(values)) {
         if (!(k in config[section])) err(`${at}.tuning.${section}.${k} is not in config.${section}`);
         else if (typeof v !== typeof config[section][k]) err(`${at}.tuning.${section}.${k} has the wrong type`);
+      }
+    }
+    const cellSize = m.tuning?.grid?.cellSize ?? config?.grid?.cellSize ?? 1;
+    for (const [j, area] of (m.terrain ?? []).entries()) {
+      if (!terrain?.[area?.kind]) err(`${at}.terrain[${j}].kind "${area?.kind}" is not a terrain type`);
+      const pts = area?.points;
+      if (!Array.isArray(pts) || pts.length < 3 || !pts.every((p) => Array.isArray(p) && isNum(p[0]) && isNum(p[1]))) {
+        err(`${at}.terrain[${j}].points must be a list of at least three [x, y] points`);
+        continue;
+      }
+      // Starting sites need their square and the ones around it clear.
+      for (const [si, s] of m.start.entries()) {
+        const cx = (Math.floor(s.x / cellSize) + 0.5) * cellSize;
+        const cy = (Math.floor(s.y / cellSize) + 0.5) * cellSize;
+        for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+          if (pointInPolygon(cx + dx * cellSize, cy + dy * cellSize, pts)) {
+            err(`${at}.start[${si}] is on or right next to terrain[${j}]`);
+            break;
+          }
+        }
       }
     }
     for (const [j, line] of (m.boundaries ?? []).entries()) {

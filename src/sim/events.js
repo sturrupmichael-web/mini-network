@@ -80,7 +80,8 @@ const EFFECTS = {
       for (const corner of corners) {
         const placed = [];
         for (let i = 0; i < ev.params.count; i++) {
-          const spot = findSpot(world, { center: corner, radius: world.map.height * 0.55 });
+          // An acquisition can be outside the open area: the map opens up to it.
+          const spot = findSpot(world, { center: corner, radius: world.map.height * 0.55, anywhere: true });
           if (!spot) break;
           const day = currentDay(world);
           const types = Object.fromEntries(

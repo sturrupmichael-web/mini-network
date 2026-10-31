@@ -3,7 +3,7 @@
  */
 import { THEME } from "../../data/theme.js";
 import { pointAlong } from "../sim/geometry.js";
-import { cellCenter, cellOf, cellsToPath, gridSize, straightCells } from "../sim/grid.js";
+import { cellCenter, cellOf, cellsToPath, gridSize, inView, straightCells } from "../sim/grid.js";
 import { isBlocked } from "../sim/links.js";
 import { worldToScreen } from "./camera.js";
 
@@ -66,7 +66,9 @@ export function render(ctx, view, world, camera, ui, now = 0) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
+  drawTerrain(ctx, world, camera, colors);
   drawBoundaries(ctx, world, camera, colors, k);
+  drawClosed(ctx, view, world, camera, colors);
   drawGrid(ctx, world, camera, colors, k, Boolean(ui.drag));
   drawLinks(ctx, world, camera, colors, k, ui, now);
   if (ui.drag) drawPreview(ctx, world, camera, ui.drag, k);
@@ -103,7 +105,52 @@ function strokePath(ctx, pts) {
   ctx.stroke();
 }
 
-/** A faint dot in the middle of every grid square (stronger while drawing). */
+/** Terrain squares (terrain.js), slightly rounded so areas read as shapes. */
+function drawTerrain(ctx, world, camera, colors) {
+  if (!world.terrain?.size) return;
+  const s = world.config.grid.cellSize;
+  const size = s * camera.scale + 0.6; // a hair of overlap so squares join up
+  const byKind = new Map();
+  for (const [key, kind] of world.terrain) {
+    if (!byKind.has(kind)) byKind.set(kind, []);
+    byKind.get(kind).push(key);
+  }
+  for (const [kind, keys] of byKind) {
+    ctx.fillStyle = colors.terrain?.[kind] ?? colors.boundary;
+    ctx.beginPath();
+    for (const key of keys) {
+      const [cx, cy] = key.split(",").map(Number);
+      const c = cellCenter(world, { cx, cy });
+      const p = worldToScreen(camera, c.x, c.y);
+      ctx.rect(p.x - size / 2, p.y - size / 2, size, size);
+    }
+    ctx.fill();
+  }
+}
+
+/** Shade everything outside the open part of the map (world.view). */
+function drawClosed(ctx, view, world, camera, colors) {
+  const v = world.view;
+  if (!v) return;
+  const a = worldToScreen(camera, v.x, v.y);
+  const b = worldToScreen(camera, v.x + v.width, v.y + v.height);
+  const x0 = Math.min(a.x, b.x);
+  const y0 = Math.min(a.y, b.y);
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  ctx.fillStyle = colors.closed;
+  ctx.fillRect(0, 0, view.width, y0);
+  ctx.fillRect(0, y1, view.width, view.height - y1);
+  ctx.fillRect(0, y0, x0, y1 - y0);
+  ctx.fillRect(x1, y0, view.width - x1, y1 - y0);
+  ctx.strokeStyle = colors.closedEdge;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 6]);
+  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.setLineDash([]);
+}
+
+/** A faint dot in the middle of every open grid square (stronger while drawing). */
 function drawGrid(ctx, world, camera, colors, k, drawing) {
   const { cols, rows } = gridSize(world);
   ctx.fillStyle = drawing ? colors.gridActive : colors.grid;
@@ -111,7 +158,9 @@ function drawGrid(ctx, world, camera, colors, k, drawing) {
   ctx.beginPath();
   for (let cx = 0; cx < cols; cx++) {
     for (let cy = 0; cy < rows; cy++) {
+      if (world.terrain?.has(`${cx},${cy}`)) continue;
       const c = cellCenter(world, { cx, cy });
+      if (!inView(world, c.x, c.y)) continue;
       const p = worldToScreen(camera, c.x, c.y);
       ctx.moveTo(p.x + r, p.y);
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);

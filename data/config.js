@@ -172,6 +172,16 @@ export const CONFIG = {
      */
     startRadius: 380,
     radiusGrowthPerDay: 60,
+    /**
+     * The map opens up as the network grows. A game starts showing this
+     * fraction of the map's width and height around the data center (the
+     * camera is zoomed in), and each new site opens viewPerSite more, until
+     * the whole map is in play. New sites only appear in the open part, and
+     * it always includes every site plus viewPadding (wu) around it.
+     */
+    viewStart: 0.7,
+    viewPerSite: 0.025,
+    viewPadding: 90,
     /** Random spots tried per new site before giving up until next time. */
     attempts: 60,
     /**
@@ -226,6 +236,8 @@ export const CONFIG = {
   view: {
     /** Empty space kept around the map, in px. */
     padding: 28,
+    /** How fast the camera zooms out as the map opens up (higher is faster). */
+    zoomSpeed: 1.6,
     /** Space reserved for the HUD bar at the top and the tray at the bottom, in px. */
     hudTop: 56,
     hudBottom: 72,

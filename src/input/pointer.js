@@ -19,7 +19,7 @@
  * wherever the pointer is now, so no squares are skipped.
  */
 import { distanceToPolyline } from "../sim/geometry.js";
-import { cellKey, cellOf, inGrid, sameCell, siteCells, stepToward } from "../sim/grid.js";
+import { cellCenter, cellKey, cellOf, inGrid, inView, isTerrain, sameCell, siteCells, stepToward } from "../sim/grid.js";
 import { screenToWorld, worldToScreen } from "../render/camera.js";
 import { removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemoveButtonPos } from "../render/renderer.js";
 
@@ -181,15 +181,30 @@ export function attachPointerInput(canvas, opts) {
       if (sameCell(lastCell, target)) return;
       const next = stepToward(lastCell, target);
       if (!inGrid(world, next)) return;
+      const centre = cellCenter(world, next);
+      if (!inView(world, centre.x, centre.y)) return;
+      if (isTerrain(world, next)) {
+        if (!drag.refused) {
+          drag.refused = true;
+          refuse("terrain");
+        }
+        return;
+      }
       const back = drag.cells.findIndex((c) => sameCell(c, next));
       if (back >= 0) {
         drag.cells.length = back + 1; // undo squares
         continue;
       }
-      // Cut square corners into diagonals: if `next` also touches the square
-      // before the last one, the last one is just a kink, so drop it.
-      const touches = (c) => Math.max(Math.abs(c.cx - next.cx), Math.abs(c.cy - next.cy)) === 1;
-      while (drag.cells.length >= 2 && touches(drag.cells.at(-2))) drag.cells.pop();
+      // Cut square corners into diagonals: a sideways step then an up/down
+      // step (an L) becomes one diagonal step.
+      if (drag.cells.length >= 2) {
+        const before = drag.cells.at(-2);
+        const last = drag.cells.at(-1);
+        const straight = (p, q) => Math.abs(p.cx - q.cx) + Math.abs(p.cy - q.cy) === 1;
+        if (straight(before, last) && straight(last, next) && Math.abs(before.cx - next.cx) === 1 && Math.abs(before.cy - next.cy) === 1) {
+          drag.cells.pop();
+        }
+      }
       const site = sites.get(cellKey(next));
       if (site) {
         const result = actions.connect(drag.fromSiteId, site.id, drag.line, [...drag.cells, next]);

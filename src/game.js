@@ -41,6 +41,8 @@ const CONFIG = GAME_DATA.config;
 const REFUSED_TEXT = {
   "no-links": "Not enough links for that. More arrive each day.",
   "through-site": "Links can't run through another site.",
+  terrain: "Links have to go around water, parks and hills.",
+  "on-terrain": "Nothing can be built on water, parks or hills.",
   "no-way": "There's no clear way through.",
   "no-leased": "Crossing a carrier boundary needs a leased line.",
   "no-upgrades": "No bandwidth upgrades left.",
@@ -105,14 +107,51 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
   darkQuery?.addEventListener?.("change", applyTheme);
   applyTheme();
 
+  /**
+   * The part of the map the camera shows. It eases towards world.view (the
+   * open part of the map, which grows as sites are added), so the view
+   * zooms out smoothly. On the title screen it's the whole map.
+   */
+  let shownView = null;
+  let lastFrame = 0;
+  const fullMap = () => ({ x: 0, y: 0, width: map.width, height: map.height });
+  function settleCamera() {
+    shownView = run ? { ...world.view } : fullMap();
+    fit();
+  }
+  function easeCamera(now) {
+    const target = run ? world.view : fullMap();
+    const dt = lastFrame ? Math.min(0.1, now - lastFrame) : 0;
+    lastFrame = now;
+    if (!shownView) shownView = { ...target };
+    const t = 1 - Math.exp(-dt * CONFIG.view.zoomSpeed);
+    let moved = false;
+    for (const k of ["x", "y", "width", "height"]) {
+      const d = target[k] - shownView[k];
+      if (Math.abs(d) < 0.05) shownView[k] = target[k];
+      else {
+        shownView[k] += d * t;
+        moved = true;
+      }
+    }
+    if (moved) fit();
+  }
+
   const view = setupCanvas(canvas, (v) => fit(v));
   function fit(v = view) {
-    fitCamera(camera, map, v.width, v.height, {
-      top: CONFIG.view.hudTop + CONFIG.view.padding,
-      bottom: CONFIG.view.hudBottom + CONFIG.view.padding,
-      left: CONFIG.view.padding,
-      right: CONFIG.view.padding,
-    });
+    fitCamera(
+      camera,
+      map,
+      v.width,
+      v.height,
+      {
+        top: CONFIG.view.hudTop + CONFIG.view.padding,
+        bottom: CONFIG.view.hudBottom + CONFIG.view.padding,
+        left: CONFIG.view.padding,
+        right: CONFIG.view.padding,
+      },
+      shownView,
+    );
   }
   fit();
 
@@ -122,7 +161,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     map = maps.find((m) => m.id === mapId) ?? maps[0];
     config = configForMap(CONFIG, map);
     world = createWorld({ config, data, map, seed: "preview" });
-    fit();
+    settleCamera();
   }
 
   const loop = createLoop({
@@ -133,6 +172,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     },
     onRender: () => {
       if (!run && title.visible) preview(title.mapId);
+      easeCamera(performance.now() / 1000);
       if (isHalted(world)) input.cancel();
       if (run && world.over && !run.result) finishRun();
       handleEvents();
@@ -211,7 +251,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     const runSeed = daily ? daily.seed : (seed ?? randomSeed());
     world = createWorld({ config, data, map, seed: runSeed, outages: mode.outages });
     run = { modeId: modes[modeId] ? modeId : "classic", mapId: map.id, seed: runSeed, daily: daily?.key ?? null, result: null, fixedSeed: Boolean(seed) };
-    fit();
+    settleCamera();
     input.cancel();
     ui.selectedLinkId = null;
     ui.selectedSiteId = null;
@@ -457,6 +497,8 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       for (let i = 0; i < n && !isHalted(world); i++) step(world);
     },
     snapshot: () => snapshot(world),
+    /** Jump the camera to where it's heading (tests and screenshots). */
+    settleCamera,
     /** Start an event now, by id (tests and the debug panel). */
     triggerEvent: (id) => triggerEvent(world, id),
     /** Use a tray item on a target, as if dropped there (tests). */

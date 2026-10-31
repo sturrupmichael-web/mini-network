@@ -43,8 +43,11 @@ same network. Or open the deployed site (below).
 - Drag from a site to another to link them. The link follows your finger
   square by square across the dotted grid, so you can steer it around
   things; drag back over it to undo squares. Each square between the two
-  sites uses one link (the counter shows how many). Keep dragging past a
-  site to chain on to the next one.
+  sites uses one link (the counter shows how many). Links can't cross
+  water, parks or hills. Keep dragging past a site to chain on to the next
+  one.
+- The game starts zoomed in around HQ. Each new site opens up more of the
+  map (the shaded part isn't open yet) and the view zooms out to match.
 - Tap or click a link, then its × to remove it (you get the link back).
   Right-click or Delete also removes.
 - Drag a link onto another site to reroute it through that site.
@@ -95,6 +98,7 @@ Every field is commented in the file. The ones that matter most:
 | Knob | What it does |
 | --- | --- |
 | `links.startingCount`, `links.perDay` | How many links (grid squares of link) you start with and get each day |
+| `growth.viewStart`, `growth.viewPerSite`, `growth.viewPadding` | How much of the map is open at the start, how much each new site opens up, and the room kept around every site |
 | `grid.cellSize` | Size of one grid square; smaller squares mean finer routes and more links per connection |
 | `links.bandwidth`, `links.packetSpeed` | How much a link carries and how fast packets move |
 | `inventory` | Starting equipment (upgrades, switches, firewalls, SD-WAN, leased lines) |
@@ -122,9 +126,11 @@ validator, which names the exact field that's wrong.
   `description`, `width`, `height`, `start` (the sites at the start: one
   `datacenter` plus a few others, at least `sites.minSpacing` apart),
   `boundaries` (carrier boundaries as lists of points; links crossing them
-  need leased lines) and optional `tuning` (config overrides for this map
-  only, e.g. `{ links: { startingCount: 12 } }`). It shows up on the title
-  screen and in the daily rotation.
+  need leased lines), optional `terrain` (shapes of water, park or hills
+  that links must go around: `{ kind, points: [[x, y], …] }`; kinds are in
+  `data/terrain.js`, colours in `data/theme.js`) and optional `tuning`
+  (config overrides for this map only, e.g. `{ links: { startingCount: 50 } }`).
+  It shows up on the title screen and in the daily rotation.
 - **A traffic type:** add it to `TRAFFIC_TYPES` in `data/traffic.js`
   (colour, shape, size, destination `to`, points, `unlockDay`, `hours`),
   then give it a weight in the `traffic` of the site types that send it in

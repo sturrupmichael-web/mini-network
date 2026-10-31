@@ -15,6 +15,8 @@ import { dispatchQueues, movePackets, spawnPackets } from "./packets.js";
 import { initProgression, updateProgression } from "./progression.js";
 import { computeRoutes } from "./routing.js";
 import { addSite, siteCapacity } from "./sites.js";
+import { buildTerrain } from "./grid.js";
+import { updateView } from "./view.js";
 
 export { addSite, siteCapacity } from "./sites.js";
 export { addFirewall, addLink, findLink, removeLink, rerouteLink, upgradeLink } from "./links.js";
@@ -69,7 +71,10 @@ export function createWorld({ config, data, map, seed, outages = true }) {
     events: [],
   };
   initProgression(world);
+  /** Cell key → terrain kind (grid.js). */
+  world.terrain = buildTerrain(world);
   for (const s of map.start) addSite(world, s.type, s.x, s.y, s.label);
+  updateView(world);
   initEvents(world);
   return world;
 }
@@ -87,6 +92,7 @@ export function step(world) {
 
   updateProgression(world);
   updateEvents(world);
+  if (world.sites.length !== world.viewSites) updateView(world);
   if (world.routing.dirty || world.time >= world.routing.nextRecompute) computeRoutes(world);
 
   spawnPackets(world);

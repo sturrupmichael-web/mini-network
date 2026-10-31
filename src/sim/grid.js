@@ -48,6 +48,46 @@ export function inGrid(world, c) {
   return c.cx >= 0 && c.cy >= 0 && c.cx < cols && c.cy < rows;
 }
 
+/** Is point p inside the polygon [[x, y], ...]? */
+function insidePolygon(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * The map's terrain as a Map from cell key to terrain kind: every square
+ * whose centre is inside one of map.terrain's shapes. Links can't cross
+ * these squares and nothing can be built on them.
+ */
+export function buildTerrain(world) {
+  const out = new Map();
+  const { cols, rows } = gridSize(world);
+  for (const area of world.map.terrain ?? []) {
+    for (let cx = 0; cx < cols; cx++) {
+      for (let cy = 0; cy < rows; cy++) {
+        const c = { cx, cy };
+        if (insidePolygon(cellCenter(world, c), area.points)) out.set(cellKey(c), area.kind);
+      }
+    }
+  }
+  return out;
+}
+
+export function isTerrain(world, c) {
+  return world.terrain?.has(cellKey(c)) ?? false;
+}
+
+/** Is world point (x, y) inside the part of the map that's open so far (world.view)? */
+export function inView(world, x, y) {
+  const v = world.view;
+  return !v || (x >= v.x && y >= v.y && x <= v.x + v.width && y <= v.y + v.height);
+}
+
 /** Map from cell key to the site in that cell. */
 export function siteCells(world) {
   const out = new Map();
@@ -68,8 +108,8 @@ export function cellCost(cells) {
 /**
  * Why `cells` isn't a valid link from site a to site b, or null if it is.
  * Valid: starts in a's cell, ends in b's cell, every step goes to a
- * touching cell, never visits a cell twice, stays on the map, and passes
- * through no other site.
+ * touching cell, never visits a cell twice, stays inside the open part
+ * of the map, and passes through no other site and no terrain.
  */
 export function pathProblem(world, cells, a, b) {
   if (!Array.isArray(cells) || cells.length < 2) return "bad-path";
@@ -80,7 +120,10 @@ export function pathProblem(world, cells, a, b) {
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i];
     if (!inGrid(world, c)) return "off-map";
+    const centre = cellCenter(world, c);
+    if (!inView(world, centre.x, centre.y)) return "off-map";
     const k = cellKey(c);
+    if (world.terrain?.has(k)) return "terrain";
     if (seen.has(k)) return "bad-path";
     seen.add(k);
     if (i > 0) {
@@ -131,6 +174,9 @@ export function autoCells(world, a, b) {
       const k = cellKey(n);
       if (!inGrid(world, n) || from.has(k)) continue;
       if (sites.has(k) && !sameCell(n, goal)) continue;
+      if (world.terrain?.has(k)) continue;
+      const centre = cellCenter(world, n);
+      if (!inView(world, centre.x, centre.y)) continue;
       from.set(k, c);
       queue.push(n);
     }

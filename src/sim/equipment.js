@@ -3,7 +3,7 @@
  * (Upgrades and firewalls go on links: see links.js.)
  */
 import { distanceToPolyline } from "./geometry.js";
-import { cellCenter, cellKey, cellOf, siteCells, snapToGrid } from "./grid.js";
+import { cellCenter, cellKey, cellOf, inView, isTerrain, siteCells, snapToGrid } from "./grid.js";
 import { addLink, leasedForCells, removeLink } from "./links.js";
 import { addSite, deleteSite } from "./sites.js";
 
@@ -12,6 +12,8 @@ export function switchSpotProblem(world, x, y, ignore = []) {
   const { map, config } = world;
   const margin = config.sites.edgeMargin / 2;
   if (x < margin || y < margin || x > map.width - margin || y > map.height - margin) return "off-map";
+  if (!inView(world, x, y)) return "off-map";
+  if (isTerrain(world, cellOf(world, x, y))) return "on-terrain";
   const here = siteCells(world).get(cellKey(cellOf(world, x, y)));
   if (here && !ignore.includes(here.id)) return "too-close";
   for (const s of world.sites) {

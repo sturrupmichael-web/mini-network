@@ -11,6 +11,12 @@ export const THEME = {
     siteShadow: "rgba(43, 43, 43, 0.28)",
     /** Dots marking the link grid, normally and while you draw. */
     grid: "rgba(43, 43, 43, 0.09)",
+    /** Terrain fills, by kind (terrain.js). */
+    terrain: { water: "#cfe2ef", park: "#d5e8cf", hills: "#e7ddcc" },
+    /** Covers the part of the map that isn't open yet. */
+    closed: "rgba(178, 172, 160, 0.42)",
+    /** The edge of the open area. */
+    closedEdge: "rgba(43, 43, 43, 0.18)",
     gridActive: "rgba(43, 43, 43, 0.22)",
     /** Small details drawn on top of a site (switch ports, SD-WAN mark). */
     siteFill: "#ffffff",
@@ -37,6 +43,9 @@ export const THEME = {
     siteOutline: "#ffffff",
     siteShadow: "rgba(0, 0, 0, 0.45)",
     grid: "rgba(233, 230, 223, 0.07)",
+    terrain: { water: "#1f3546", park: "#21392b", hills: "#43382b" },
+    closed: "rgba(0, 0, 0, 0.45)",
+    closedEdge: "rgba(233, 230, 223, 0.16)",
     gridActive: "rgba(233, 230, 223, 0.2)",
     siteFill: "#ffffff",
     hubText: "#ffffff",

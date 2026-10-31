@@ -65,6 +65,7 @@ for (let half = 0; half < DAYS * 2; half++) {
   await page.evaluate(() => {
     const g = window.miniNetwork;
     g.runTicks(g.world.config.sim.tickRate * g.world.config.time.secondsPerDay * 0.5);
+    g.settleCamera();
     g.world.pendingReward = null; // skip the weekly card for the picture
   });
 }
