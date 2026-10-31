@@ -125,6 +125,31 @@ export const tests = [
       }
     }
   }],
+  ["new sites never appear on top of a link", () => {
+    const config = configWith({ overload: { seconds: 1e9 } });
+    const world = makeWorld({ config, seed: "on-links" });
+    world.inventory.links = 999;
+    world.inventory.leased = 99;
+    const hub = world.sites.find((s) => s.type === "datacenter");
+    const linkAll = () => {
+      for (const s of world.sites) {
+        if (s !== hub && s.links.length === 0 && !world.data.sites[s.type].junction) addLink(world, s.id, hub.id);
+      }
+    };
+    linkAll();
+    for (let i = 0; i < TPS * 60 * 8; i++) {
+      if (world.pendingReward) chooseReward(world, world.pendingReward.options[0]);
+      const before = world.sites.length;
+      step(world);
+      for (const s of world.sites.slice(before)) {
+        for (const l of world.links) {
+          assert.ok(distanceToPolyline(s, l.path) >= config.sites.linkClearance, `site ${s.id} sits on link ${l.id}`);
+        }
+      }
+      linkAll();
+    }
+    assert.ok(world.sites.length > 12, `sites still appear: ${world.sites.length}`);
+  }],
   ["no spot is found on a full map", () => {
     const start = [{ type: "datacenter", x: 600, y: 400 }];
     for (let x = 60; x <= 1140; x += 100) for (let y = 60; y <= 740; y += 100) start.push({ type: "office", x, y });

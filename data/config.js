@@ -138,8 +138,10 @@ export const CONFIG = {
     minSpacing: 110,
     /** New sites keep at least this far (wu) from the map edge... */
     edgeMargin: 50,
-    /** ...and from carrier boundaries. */
+    /** ...and from carrier boundaries... */
     boundaryClearance: 45,
+    /** ...and from every link you've drawn, so a site never appears on top of one. */
+    linkClearance: 34,
   },
 
   growth: {

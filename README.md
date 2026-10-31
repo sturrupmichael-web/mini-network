@@ -98,6 +98,7 @@ Every field is commented in the file. The ones that matter most:
 | `growth.firstSiteAt`, `growth.interval`, `growth.intervalDecay`, `growth.minInterval` | How often new sites appear, and how fast that speeds up |
 | `growth.startRadius`, `growth.radiusGrowthPerDay` | How far from the data center new sites can appear |
 | `growth.types` | Odds of each kind of new site |
+| `sites.minSpacing`, `sites.linkClearance` | How far new sites keep from other sites and from your links |
 | `overload.seconds`, `overload.recoveryRate` | How long a site can stay over capacity before an outage, and how fast it recovers |
 | `failover.convergenceSeconds` | How long sites without SD-WAN take to notice a cut link |
 | `time.secondsPerDay`, `time.daysPerWeek` | Length of a day and of a week (rewards come weekly) |

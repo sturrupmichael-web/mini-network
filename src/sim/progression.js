@@ -63,11 +63,11 @@ export function updateProgression(world) {
 /**
  * A random valid spot for a new site within `radius` of `center`, or null.
  * Valid: inside the edge margin, at least minSpacing from every site, and
- * clear of carrier boundaries.
+ * clear of carrier boundaries and of every link.
  */
 export function findSpot(world, { center, radius }) {
   const { map, config } = world;
-  const { edgeMargin, minSpacing, boundaryClearance } = config.sites;
+  const { edgeMargin, minSpacing, boundaryClearance, linkClearance = 0 } = config.sites;
   const boundaries = (map.boundaries ?? []).map((b) => b.map(([x, y]) => ({ x, y })));
   for (let i = 0; i < config.growth.attempts; i++) {
     const x = Math.round(world.rng.range(edgeMargin, map.width - edgeMargin));
@@ -76,6 +76,7 @@ export function findSpot(world, { center, radius }) {
     if (world.sites.some((s) => Math.hypot(s.x - x, s.y - y) < minSpacing)) continue;
     const p = { x, y };
     if (boundaries.some((b) => distanceToPolyline(p, b) < boundaryClearance)) continue;
+    if (world.links.some((l) => distanceToPolyline(p, l.path) < linkClearance)) continue;
     return { x, y };
   }
   return null;
