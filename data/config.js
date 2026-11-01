@@ -212,6 +212,13 @@ export const CONFIG = {
      * seconds per second (2 = recovers twice as fast as it fills).
      */
     recoveryRate: 1.5,
+    /**
+     * When a ring passes this fraction of `seconds`, the site is "almost
+     * full": a warning sound plays once and the ring pulses faster. Sites
+     * off screen get an arrow at the edge pointing to them while their ring
+     * is filling.
+     */
+    warnAt: 0.7,
   },
 
   time: {

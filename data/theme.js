@@ -13,12 +13,13 @@ export const THEME = {
     grid: "rgba(43, 43, 43, 0.09)",
     /**
      * Terrain, by kind (terrain.js): a fill, a darker outline around each
-     * area, and faint diagonal hatching so it reads as "can't build here".
+     * area, and the colour of its faint texture (pattern in terrain.js), so it
+     * reads as "can't build here" without relying on colour.
      */
     terrain: {
-      water: { fill: "#b9d6ea", edge: "#6f9fc2", hatch: "rgba(70, 120, 160, 0.16)" },
-      park: { fill: "#c4e0bb", edge: "#7fae72", hatch: "rgba(80, 130, 70, 0.16)" },
-      hills: { fill: "#e2d2b8", edge: "#b39a74", hatch: "rgba(140, 110, 70, 0.16)" },
+      water: { fill: "#b9d6ea", edge: "#6f9fc2", hatch: "rgba(70, 120, 160, 0.3)" },
+      park: { fill: "#c4e0bb", edge: "#7fae72", hatch: "rgba(80, 130, 70, 0.3)" },
+      hills: { fill: "#e2d2b8", edge: "#b39a74", hatch: "rgba(140, 110, 70, 0.3)" },
     },
     /** Covers the part of the map that isn't open yet. */
     closed: "rgba(178, 172, 160, 0.42)",
@@ -38,6 +39,8 @@ export const THEME = {
     /** The background at the darkest point of the night. */
     nightBackground: "#e3e1dc",
     down: "#e8483f",
+    /** The square a drag bumped into (drawn with a `down` outline). */
+    blockedFill: "rgba(232, 72, 63, 0.28)",
     blocked: "#f2994a",
     firewall: "#f2994a",
     sdwan: "#13a8b5",
@@ -51,9 +54,9 @@ export const THEME = {
     siteShadow: "rgba(0, 0, 0, 0.45)",
     grid: "rgba(233, 230, 223, 0.07)",
     terrain: {
-      water: { fill: "#24425a", edge: "#4f7fa3", hatch: "rgba(140, 185, 220, 0.12)" },
-      park: { fill: "#264532", edge: "#4f8a62", hatch: "rgba(150, 210, 165, 0.12)" },
-      hills: { fill: "#4a3d2d", edge: "#8a7152", hatch: "rgba(225, 195, 150, 0.12)" },
+      water: { fill: "#24425a", edge: "#4f7fa3", hatch: "rgba(140, 185, 220, 0.22)" },
+      park: { fill: "#264532", edge: "#4f8a62", hatch: "rgba(150, 210, 165, 0.22)" },
+      hills: { fill: "#4a3d2d", edge: "#8a7152", hatch: "rgba(225, 195, 150, 0.22)" },
     },
     closed: "rgba(0, 0, 0, 0.45)",
     closedEdge: "rgba(233, 230, 223, 0.16)",
@@ -69,6 +72,7 @@ export const THEME = {
     dim: "rgba(29, 30, 34, 0.6)",
     nightBackground: "#141518",
     down: "#ff6b5e",
+    blockedFill: "rgba(255, 107, 94, 0.3)",
     blocked: "#f2a65a",
     firewall: "#f2a65a",
     sdwan: "#2cc4cf",

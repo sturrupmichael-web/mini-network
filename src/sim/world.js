@@ -102,7 +102,7 @@ export function step(world) {
 }
 
 function updateOverload(world) {
-  const { seconds, recoveryRate } = world.config.overload;
+  const { seconds, recoveryRate, warnAt = 0.7 } = world.config.overload;
   let worst = 0;
   for (const site of world.sites) worst = Math.max(worst, site.overload / seconds);
   while (world.dayStress.length <= world.day) world.dayStress.push(0);
@@ -112,6 +112,10 @@ function updateOverload(world) {
     const before = site.overload;
     site.overload = over ? site.overload + world.dt : Math.max(0, site.overload - world.dt * recoveryRate);
     if (before === 0 && site.overload > 0) world.events.push({ type: "overload-start", siteId: site.id });
+    // "Almost full": once per climb past warnAt (only when an outage would end the game).
+    if (world.outages && before < seconds * warnAt && site.overload >= seconds * warnAt) {
+      world.events.push({ type: "overload-warning", siteId: site.id });
+    }
     if (site.overload >= seconds) {
       if (world.outages) {
         world.over = { siteId: site.id, time: world.time };

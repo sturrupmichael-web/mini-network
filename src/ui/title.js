@@ -37,7 +37,8 @@ export function createTitle(root, opts) {
           ${maps
             .map(
               (m) => `<button type="button" role="radio" class="map-card" data-map="${esc(m.id)}" aria-checked="false">
-                <strong>${esc(m.name)}</strong><span>${esc(m.description ?? "")}</span></button>`,
+                <strong>${esc(m.name)}</strong><span>${esc(m.description ?? "")}</span>
+                <span class="map-best" data-map-best="${esc(m.id)}"></span></button>`,
             )
             .join("")}
         </div>
@@ -86,6 +87,13 @@ export function createTitle(root, opts) {
     for (const b of mapBtns) {
       b.setAttribute("aria-checked", String(b.dataset.map === shownMap));
       b.disabled = Boolean(forced) && b.dataset.map !== forced;
+    }
+    // Each map card shows its own best (not for the daily, whose best is per day).
+    for (const b of mapBtns) {
+      const e = mode.scores && !mode.daily ? best(modeId, b.dataset.map) : null;
+      const span = b.querySelector("[data-map-best]");
+      span.textContent = e ? `Best ${e.score}` : "";
+      span.hidden = !e;
     }
     const entry = mode.scores ? best(modeId, shownMap) : null;
     const label = mode.daily ? "Today's best" : "Best";

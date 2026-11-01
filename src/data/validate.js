@@ -38,6 +38,13 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
   }
   if (Object.keys(config?.growth?.types ?? {}).length === 0) err("config.growth.types needs at least one site type");
   if (config?.overload?.seconds <= 0) err("config.overload.seconds must be > 0");
+  const warnAt = config?.overload?.warnAt;
+  if (!(warnAt > 0 && warnAt < 1)) err("config.overload.warnAt must be between 0 and 1");
+
+  // Terrain kinds.
+  for (const [id, t] of Object.entries(terrain ?? {})) {
+    if (!["waves", "dots", "hatch"].includes(t?.pattern)) err(`terrain.${id}.pattern must be "waves", "dots" or "hatch"`);
+  }
 
   // Rewards.
   if (!Array.isArray(rewards) || rewards.length < 2) err("rewards must list at least two rewards");

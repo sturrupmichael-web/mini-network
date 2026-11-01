@@ -202,6 +202,11 @@ It avoids going straight back where it came from unless that's the only way.
   Map from cell key to kind, built once in `createWorld`). Links can't
   cross those squares, switches can't go on them, and new sites keep a
   square away. The validator checks starting sites are clear.
+- **Drawing terrain**: each kind has a fill, a darker outline traced in
+  world space (so it's right when the camera is turned), and a texture
+  (`pattern` in `data/terrain.js`: waves, dots or hatch, coloured by
+  `theme.terrain.<kind>.hatch`). When a drag bumps into terrain,
+  `pointer.js` sets `ui.blockedCell` and the renderer flashes that square.
 - **The open area** (`world.view`, `sim/view.js`): starts at
   `growth.viewStart` of the map around HQ and grows by `growth.viewPerSite`
   per added site; it always includes every site plus `growth.viewPadding`,
@@ -275,3 +280,18 @@ and fails if any `src`/`href` in `dev.html` still points at a file.
 `npm test` runs `tests/*.test.mjs`. Browser files (`export const browser =
 true`) run three times: `dev.html` over http, the built `index.html` over
 http, and `index.html` from disk. Any console error fails a browser test.
+
+## Warnings, tutorial and replays
+
+- **Almost full**: when a site's ring passes `overload.warnAt` (classic and
+  daily only), the sim emits `overload-warning` once per climb; `game.js`
+  plays the `warning` cue and the ring glows and pulses faster. Sites with a
+  filling ring that are off screen or under the HUD get an arrow at the
+  edge (`offscreenArrow` in the renderer, using `ui.insets`).
+- **Tutorial** (`src/tutorial.js`): three prompts on the first game started
+  from the title (link a site, steer around terrain, use gear), shown by
+  `hud.coach`. Finishing or skipping sets `tutorialDone` in storage. URL
+  replays (`?seed=`) and the daily challenge never show it.
+- **Replays**: the game-over card has "Same seed" (not for the daily), which
+  replays that game once; "Play again" picks a new seed. The title screen's
+  map cards show each map's best for the chosen mode.

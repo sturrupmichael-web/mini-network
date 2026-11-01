@@ -54,6 +54,14 @@ same network. Or open the deployed site (below).
 - Drag equipment from the tray at the bottom onto the map (or tap it, then
   tap where it goes). Hover over a tool (or press it on a phone) to see what
   it does.
+- Bumping into water, a park or hills while drawing flashes that square
+  red. Each kind has its own texture (waves, dots, hatching).
+- When a site is almost full its ring glows and a warning sounds. If it's
+  off screen or under the toolbar, an arrow at the edge points to it.
+- Your first game from the title screen shows three quick tips at the top
+  (Skip turns them off for good).
+- After a game ends, "Same seed" replays exactly that game. The title
+  screen shows your best score on each map.
 - Space pauses, 1 and 2 set the speed, M mutes, Escape opens the menu.
 
 ## Build and test
