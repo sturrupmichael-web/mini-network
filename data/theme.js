@@ -11,8 +11,15 @@ export const THEME = {
     siteShadow: "rgba(43, 43, 43, 0.28)",
     /** Dots marking the link grid, normally and while you draw. */
     grid: "rgba(43, 43, 43, 0.09)",
-    /** Terrain fills, by kind (terrain.js). */
-    terrain: { water: "#cfe2ef", park: "#d5e8cf", hills: "#e7ddcc" },
+    /**
+     * Terrain, by kind (terrain.js): a fill, a darker outline around each
+     * area, and faint diagonal hatching so it reads as "can't build here".
+     */
+    terrain: {
+      water: { fill: "#b9d6ea", edge: "#6f9fc2", hatch: "rgba(70, 120, 160, 0.16)" },
+      park: { fill: "#c4e0bb", edge: "#7fae72", hatch: "rgba(80, 130, 70, 0.16)" },
+      hills: { fill: "#e2d2b8", edge: "#b39a74", hatch: "rgba(140, 110, 70, 0.16)" },
+    },
     /** Covers the part of the map that isn't open yet. */
     closed: "rgba(178, 172, 160, 0.42)",
     /** The edge of the open area. */
@@ -43,7 +50,11 @@ export const THEME = {
     siteOutline: "#ffffff",
     siteShadow: "rgba(0, 0, 0, 0.45)",
     grid: "rgba(233, 230, 223, 0.07)",
-    terrain: { water: "#1f3546", park: "#21392b", hills: "#43382b" },
+    terrain: {
+      water: { fill: "#24425a", edge: "#4f7fa3", hatch: "rgba(140, 185, 220, 0.12)" },
+      park: { fill: "#264532", edge: "#4f8a62", hatch: "rgba(150, 210, 165, 0.12)" },
+      hills: { fill: "#4a3d2d", edge: "#8a7152", hatch: "rgba(225, 195, 150, 0.12)" },
+    },
     closed: "rgba(0, 0, 0, 0.45)",
     closedEdge: "rgba(233, 230, 223, 0.16)",
     gridActive: "rgba(233, 230, 223, 0.2)",

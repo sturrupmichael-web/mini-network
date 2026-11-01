@@ -106,27 +106,78 @@ function strokePath(ctx, pts) {
   ctx.stroke();
 }
 
-/** Terrain squares (terrain.js), slightly rounded so areas read as shapes. */
+/**
+ * Terrain squares (terrain.js). Each kind is filled, hatched with faint
+ * diagonal lines, and outlined where it meets anything else, so blocked
+ * areas stand out from open ground in both themes.
+ */
 function drawTerrain(ctx, world, camera, colors) {
   if (!world.terrain?.size) return;
   const s = world.config.grid.cellSize;
   const size = s * camera.scale + 0.6; // a hair of overlap so squares join up
+  const half = (s * camera.scale) / 2;
   const byKind = new Map();
   for (const [key, kind] of world.terrain) {
     if (!byKind.has(kind)) byKind.set(kind, []);
     byKind.get(kind).push(key);
   }
   for (const [kind, keys] of byKind) {
-    ctx.fillStyle = colors.terrain?.[kind] ?? colors.boundary;
-    ctx.beginPath();
-    for (const key of keys) {
+    const style = terrainStyle(colors, kind);
+    const cells = keys.map((key) => {
       const [cx, cy] = key.split(",").map(Number);
       const c = cellCenter(world, { cx, cy });
-      const p = worldToScreen(camera, c.x, c.y);
+      return { cx, cy, p: worldToScreen(camera, c.x, c.y) };
+    });
+
+    ctx.beginPath();
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const { p } of cells) {
       ctx.rect(p.x - size / 2, p.y - size / 2, size, size);
+      minX = Math.min(minX, p.x - half);
+      minY = Math.min(minY, p.y - half);
+      maxX = Math.max(maxX, p.x + half);
+      maxY = Math.max(maxY, p.y + half);
     }
+    ctx.fillStyle = style.fill;
     ctx.fill();
+
+    if (style.hatch) {
+      ctx.save();
+      ctx.clip();
+      ctx.strokeStyle = style.hatch;
+      ctx.lineWidth = Math.max(1, 1.5 * camera.scale);
+      const gap = Math.max(6, s * camera.scale * 0.3);
+      ctx.beginPath();
+      for (let x = minX - (maxY - minY); x < maxX; x += gap) {
+        ctx.moveTo(x, maxY);
+        ctx.lineTo(x + (maxY - minY), minY);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (style.edge) {
+      const same = (cx, cy) => world.terrain.get(`${cx},${cy}`) === kind;
+      ctx.strokeStyle = style.edge;
+      ctx.lineWidth = Math.max(1.5, 2 * camera.scale);
+      ctx.beginPath();
+      for (const { cx, cy, p } of cells) {
+        const l = p.x - half, r = p.x + half, t = p.y - half, b = p.y + half;
+        if (!same(cx, cy - 1)) { ctx.moveTo(l, t); ctx.lineTo(r, t); }
+        if (!same(cx, cy + 1)) { ctx.moveTo(l, b); ctx.lineTo(r, b); }
+        if (!same(cx - 1, cy)) { ctx.moveTo(l, t); ctx.lineTo(l, b); }
+        if (!same(cx + 1, cy)) { ctx.moveTo(r, t); ctx.lineTo(r, b); }
+      }
+      ctx.stroke();
+    }
   }
+}
+
+/** A terrain kind's colours; a plain string in the theme is taken as just a fill. */
+export function terrainStyle(colors, kind) {
+  const t = colors.terrain?.[kind];
+  if (!t) return { fill: colors.boundary };
+  return typeof t === "string" ? { fill: t } : t;
 }
 
 /** Shade everything outside the open part of the map (world.view). */
