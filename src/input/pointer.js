@@ -184,6 +184,8 @@ export function attachPointerInput(canvas, opts) {
       const centre = cellCenter(world, next);
       if (!inView(world, centre.x, centre.y)) return;
       if (isTerrain(world, next)) {
+        // Flash the square that's in the way (renderer: drawBlockedCell).
+        ui.blockedCell = { cx: next.cx, cy: next.cy, born: performance.now() / 1000 };
         if (!drag.refused) {
           drag.refused = true;
           refuse("terrain");

@@ -43,5 +43,6 @@ export const AUDIO = {
     drop: { freq: 155, volume: 0.06, decay: 0.4 },
     outage: { freq: 98, volume: 0.14, decay: 2.5 },
     reward: { freq: 523, volume: 0.08, decay: 1.2 },
+    warning: { freq: 330, volume: 0.09, decay: 0.5 },
   },
 };

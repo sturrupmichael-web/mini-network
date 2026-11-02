@@ -5,6 +5,9 @@ import { createCamera, fitCamera, worldToScreen } from "../src/render/camera.js"
 import { configForMap } from "../src/sim/config.js";
 import { autoCells, cellCenter, cellKey, cellOf, inView, isTerrain } from "../src/sim/grid.js";
 import { chooseReward } from "../src/sim/progression.js";
+import { THEME } from "../data/theme.js";
+import { TERRAIN_TYPES } from "../data/terrain.js";
+import { terrainStyle } from "../src/render/renderer.js";
 import { addLink, placeSwitch, step } from "../src/sim/world.js";
 import { configWith, customMap, makeWorld } from "./helpers.mjs";
 
@@ -128,5 +131,17 @@ export const tests = [
       assert.ok(cam.scale > full.scale, "zoomed in compared to the whole map");
       assert.equal(cam.rotated, full.rotated, "turning depends on the map, not the area");
     }
+  }],
+  ["every terrain kind has a fill and an outline in both themes", () => {
+    for (const theme of ["light", "dark"]) {
+      for (const kind of Object.keys(TERRAIN_TYPES)) {
+        const style = terrainStyle(THEME[theme], kind);
+        assert.match(style.fill, /^#[0-9a-f]{6}$/i, `${theme} ${kind} fill`);
+        assert.match(style.edge, /^#[0-9a-f]{6}$/i, `${theme} ${kind} outline`);
+        assert.notEqual(style.fill, style.edge, `${theme} ${kind} outline differs from fill`);
+        assert.notEqual(style.fill, THEME[theme].background, `${theme} ${kind} differs from the ground`);
+      }
+    }
+    assert.deepEqual(terrainStyle({ terrain: { water: "#123456" } }, "water"), { fill: "#123456" });
   }],
 ];

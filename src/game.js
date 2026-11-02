@@ -35,6 +35,7 @@ import { createStorage } from "./storage.js";
 import { createDebugPanel } from "./ui/debug.js";
 import { createHud } from "./ui/hud.js";
 import { createTitle } from "./ui/title.js";
+import { createTutorial } from "./tutorial.js";
 
 const CONFIG = GAME_DATA.config;
 
@@ -89,6 +90,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     pops: [],
   };
   let nextLineIndex = 0;
+  let tutorial = createTutorial(storage, false);
 
   /** The current game: { modeId, mapId, seed, daily, result } or null on the title screen. */
   let run = null;
@@ -149,6 +151,8 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     if (moved) fit();
   }
 
+  // Space the HUD covers at the top and bottom (the renderer keeps off-screen arrows clear of it).
+  ui.insets = { top: CONFIG.view.hudTop, bottom: CONFIG.view.hudBottom, left: 0, right: 0 };
   const view = setupCanvas(canvas, (v) => fit(v));
   function fit(v = view) {
     fitCamera(
@@ -188,6 +192,8 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       if (isHalted(world)) input.cancel();
       if (run && world.over && !run.result) finishRun();
       handleEvents();
+      if (run && tutorial.active) tutorial.update({ links: world.links.length });
+      hud.coach(run && !world.over ? tutorial.text : null);
       const now = performance.now() / 1000;
       ui.pops = ui.pops.filter((p) => now - p.born < 1);
       render(view.ctx, view, world, camera, ui, now);
@@ -221,6 +227,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       } else if (e.type === "event") audio.cue("event");
       else if (e.type === "dropped") audio.cue("drop");
       else if (e.type === "outage") audio.cue("outage");
+      else if (e.type === "overload-warning") audio.cue("warning");
       else if (e.type === "week") audio.cue("reward");
     }
   }
@@ -255,27 +262,36 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
   }
 
   /** Start a game. */
-  function startRun({ modeId, mapId, seed }) {
+  /**
+   * @param {object} choice  { modeId, mapId, seed }; `tutorial: false`
+   *                         skips the first-game tutorial (URL replays).
+   */
+  function startRun({ modeId, mapId, seed, tutorial: withTutorial = true, fixedSeed = Boolean(seed) }) {
     const mode = modes[modeId] ?? modes.classic;
     const daily = mode.daily ? dailyChallenge(maps) : null;
     map = maps.find((m) => m.id === (daily ? daily.mapId : mapId)) ?? maps[0];
     config = configForMap(CONFIG, map);
     const runSeed = daily ? daily.seed : (seed ?? randomSeed());
     world = createWorld({ config, data, map, seed: runSeed, outages: mode.outages });
-    run = { modeId: modes[modeId] ? modeId : "classic", mapId: map.id, seed: runSeed, daily: daily?.key ?? null, result: null, fixedSeed: Boolean(seed) };
+    run = { modeId: modes[modeId] ? modeId : "classic", mapId: map.id, seed: runSeed, daily: daily?.key ?? null, result: null, fixedSeed };
     settleCamera();
     input.cancel();
     ui.selectedLinkId = null;
     ui.selectedSiteId = null;
     ui.pops = [];
     nextLineIndex = 0;
+    tutorial = createTutorial(storage, withTutorial && !daily);
     loop.paused = false;
     title.hide();
   }
 
-  function restart() {
+  /** Play again: a new seed, or the same one with { sameSeed: true }. */
+  function restart({ sameSeed = false } = {}) {
     if (!run) return;
-    startRun({ modeId: run.modeId, mapId: run.mapId, seed: run.fixedSeed ? run.seed : undefined });
+    const seed = sameSeed || run.fixedSeed ? run.seed : undefined;
+    // "Same seed" replays this game once; "Play again" afterwards is new again
+    // (unless the game came from a ?seed= URL, which always replays).
+    startRun({ modeId: run.modeId, mapId: run.mapId, seed, fixedSeed: run.fixedSeed, tutorial: !run.fixedSeed });
   }
 
   function openMenu() {
@@ -337,6 +353,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       applyTheme();
     },
     onShare: copyText,
+    onSkipTutorial: () => tutorial.skip(),
     onItemPointerDown: (item, e) => {
       if (e) input.startPlacement(item, e);
       else ui.armed = ui.armed === item ? null : item; // keyboard
@@ -420,7 +437,11 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       remove: (linkId) => removeLink(world, linkId),
       reroute: (linkId, siteId) => rerouteLink(world, linkId, siteId),
       removeSite: (siteId) => removeSwitch(world, siteId),
-      place,
+      place: (item, target) => {
+        const r = place(item, target);
+        if (r?.ok) tutorial.placed();
+        return r;
+      },
       lineFor,
     },
     items: GAME_DATA.items,
@@ -467,7 +488,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     if (document.hidden && run) loop.paused = true;
   });
 
-  if (autostart) startRun(autostart);
+  if (autostart) startRun({ ...autostart, tutorial: false });
   else title.show();
   loop.start();
 
@@ -484,6 +505,9 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     },
     get settings() {
       return settings;
+    },
+    get tutorial() {
+      return tutorial;
     },
     loop,
     camera,

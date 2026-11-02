@@ -40,7 +40,7 @@ export function describeSurvival(days) {
  * @param {(item: string, e: PointerEvent) => void} opts.onItemPointerDown
  */
 export function createHud(root, opts) {
-  const { onPause, onSpeed, onReward, onRestart, onMenu, onMute, onTheme, onShare, onItemPointerDown, speeds, items } = opts;
+  const { onPause, onSpeed, onReward, onRestart, onMenu, onMute, onTheme, onShare, onItemPointerDown, onSkipTutorial, speeds, items } = opts;
   root.innerHTML = `
     <div class="hud-top">
       <div class="hud-left">
@@ -84,6 +84,10 @@ export function createHud(root, opts) {
       <span data-hud="tip-text"></span>
       <span class="tray-tip-count" data-hud="tip-count"></span>
     </div>
+    <div class="hud-coach" data-hud="coach" role="status" aria-live="polite" hidden>
+      <span data-hud="coach-text"></span>
+      <button type="button" class="text-btn" data-hud="coach-skip">Skip</button>
+    </div>
     <div class="hud-hint" data-hud="hint" role="status"></div>
     <div class="hud-toast" data-hud="toast" role="status"></div>
     <div class="hud-ticker" data-hud="ticker" role="status" aria-live="polite">
@@ -112,6 +116,7 @@ export function createHud(root, opts) {
         </div>
         <div class="card-actions">
           <button type="button" class="primary-btn" data-hud="restart">Play again</button>
+          <button type="button" class="secondary-btn" data-hud="same-seed" hidden>Same seed</button>
           <button type="button" class="secondary-btn" data-hud="over-menu">Menu</button>
         </div>
         <p class="card-seed" data-hud="over-seed"></p>
@@ -145,6 +150,10 @@ export function createHud(root, opts) {
     overBest: q("over-best"),
     overSeed: q("over-seed"),
     overMenu: q("over-menu"),
+    sameSeed: q("same-seed"),
+    coach: q("coach"),
+    coachText: q("coach-text"),
+    coachSkip: q("coach-skip"),
     share: q("share"),
     shareText: q("share-text"),
     shareBtn: q("share-btn"),
@@ -228,6 +237,8 @@ export function createHud(root, opts) {
   el.pause.addEventListener("click", () => onPause());
   for (const b of speedBtns) b.addEventListener("click", () => onSpeed(Number(b.dataset.speed)));
   el.restart.addEventListener("click", () => onRestart());
+  el.sameSeed.addEventListener("click", () => onRestart({ sameSeed: true }));
+  el.coachSkip.addEventListener("click", () => onSkipTutorial?.());
   el.menu.addEventListener("click", () => onMenu());
   el.overMenu.addEventListener("click", () => onMenu());
   el.mute.addEventListener("click", () => onMute());
@@ -257,6 +268,7 @@ export function createHud(root, opts) {
     muted: null,
     theme: null,
     run: "",
+    coach: null,
   };
 
   return {
@@ -362,9 +374,17 @@ export function createHud(root, opts) {
           el.share.hidden = !r?.share;
           el.shareText.textContent = r?.share ?? "";
           el.overSeed.textContent = r?.seed ? `Seed ${r.seed}` : "";
+          el.sameSeed.hidden = !r?.seed;
           el.restart.focus();
         }
       }
+    },
+    /** The tutorial prompt, or null to hide it. */
+    coach(text) {
+      if (shown.coach === text) return;
+      shown.coach = text;
+      el.coach.hidden = !text;
+      el.coachText.textContent = text ?? "";
     },
     /** A short headline for an event, shown at the top for a few seconds. */
     ticker(title, text) {

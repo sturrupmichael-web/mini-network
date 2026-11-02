@@ -1,6 +1,7 @@
 /**
  * Draws the world onto the canvas. Reads simulation state, never changes it.
  */
+import { TERRAIN_TYPES } from "../../data/terrain.js";
 import { THEME } from "../../data/theme.js";
 import { pointAlong } from "../sim/geometry.js";
 import { cellCenter, cellOf, cellsToPath, gridSize, straightCells } from "../sim/grid.js";
@@ -73,6 +74,7 @@ export function render(ctx, view, world, camera, ui, now = 0) {
   drawGrid(ctx, world, camera, colors, k, Boolean(ui.drag), ui.shownView);
   drawLinks(ctx, world, camera, colors, k, ui, now);
   if (ui.drag) drawPreview(ctx, world, camera, ui.drag, k);
+  drawBlockedCell(ctx, world, camera, colors, ui.blockedCell, now);
   if (ui.reroute) drawReroute(ctx, world, camera, ui.reroute, k);
   if (ui.place?.target) drawDropTarget(ctx, world, camera, colors, ui.place.target, k);
   drawTravellingPackets(ctx, world, camera, k);
@@ -80,6 +82,7 @@ export function render(ctx, view, world, camera, ui, now = 0) {
   for (const site of world.sites) drawOverload(ctx, world, camera, colors, site, k, now);
   for (const site of world.sites) drawSite(ctx, world, camera, colors, site, ui, k);
   for (const site of world.sites) drawQueue(ctx, world, camera, site, k);
+  drawOffscreenArrows(ctx, view, world, camera, colors, ui.insets, k, now);
   const selected = ui.selectedLinkId && world.linkById.get(ui.selectedLinkId);
   if (selected) drawRemoveButton(ctx, camera, colors, removeButtonPos(world, selected, camera));
   const selectedSite = ui.selectedSiteId && world.siteById.get(ui.selectedSiteId);
@@ -106,27 +109,150 @@ function strokePath(ctx, pts) {
   ctx.stroke();
 }
 
-/** Terrain squares (terrain.js), slightly rounded so areas read as shapes. */
+/**
+ * Terrain squares (terrain.js). Each kind is filled, textured with its own
+ * faint pattern (waves, dots, hatching), and outlined where it meets anything else, so blocked
+ * areas stand out from open ground in both themes.
+ */
 function drawTerrain(ctx, world, camera, colors) {
   if (!world.terrain?.size) return;
   const s = world.config.grid.cellSize;
   const size = s * camera.scale + 0.6; // a hair of overlap so squares join up
+  const half = (s * camera.scale) / 2;
   const byKind = new Map();
   for (const [key, kind] of world.terrain) {
     if (!byKind.has(kind)) byKind.set(kind, []);
     byKind.get(kind).push(key);
   }
   for (const [kind, keys] of byKind) {
-    ctx.fillStyle = colors.terrain?.[kind] ?? colors.boundary;
-    ctx.beginPath();
-    for (const key of keys) {
+    const style = terrainStyle(colors, kind);
+    const cells = keys.map((key) => {
       const [cx, cy] = key.split(",").map(Number);
       const c = cellCenter(world, { cx, cy });
-      const p = worldToScreen(camera, c.x, c.y);
+      return { cx, cy, p: worldToScreen(camera, c.x, c.y) };
+    });
+
+    ctx.beginPath();
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const { p } of cells) {
       ctx.rect(p.x - size / 2, p.y - size / 2, size, size);
+      minX = Math.min(minX, p.x - half);
+      minY = Math.min(minY, p.y - half);
+      maxX = Math.max(maxX, p.x + half);
+      maxY = Math.max(maxY, p.y + half);
+    }
+    ctx.fillStyle = style.fill;
+    ctx.fill();
+
+    if (style.hatch) {
+      ctx.save();
+      ctx.clip();
+      drawPattern(ctx, TERRAIN_TYPES[kind]?.pattern ?? "hatch", style.hatch, camera.scale * s, { minX, minY, maxX, maxY });
+      ctx.restore();
+    }
+
+    if (style.edge) {
+      // Trace the area's outline in world space (the camera may be turned
+      // for a tall phone screen, so screen up isn't always grid up).
+      const same = (cx, cy) => world.terrain.get(`${cx},${cy}`) === kind;
+      const line = (x0, y0, x1, y1) => {
+        const a = worldToScreen(camera, x0, y0);
+        const b = worldToScreen(camera, x1, y1);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      };
+      ctx.strokeStyle = style.edge;
+      ctx.lineWidth = Math.max(1.5, 2 * camera.scale);
+      ctx.beginPath();
+      for (const { cx, cy } of cells) {
+        const c = cellCenter(world, { cx, cy });
+        const l = c.x - s / 2, r = c.x + s / 2, t = c.y - s / 2, b = c.y + s / 2;
+        if (!same(cx, cy - 1)) line(l, t, r, t);
+        if (!same(cx, cy + 1)) line(l, b, r, b);
+        if (!same(cx - 1, cy)) line(l, t, l, b);
+        if (!same(cx + 1, cy)) line(r, t, r, b);
+      }
+      ctx.stroke();
+    }
+  }
+}
+
+/**
+ * A texture over a terrain area (already clipped to it). `cell` is a grid
+ * square's size on screen, so the texture scales with the zoom.
+ *   waves  short wavy lines (water)
+ *   dots   a staggered grid of dots (parks)
+ *   hatch  diagonal lines (hills)
+ */
+function drawPattern(ctx, pattern, color, cell, box) {
+  const { minX, minY, maxX, maxY } = box;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1.2, cell * 0.06);
+  if (pattern === "dots") {
+    const gap = Math.max(9, cell * 0.5);
+    const r = Math.max(1.5, cell * 0.08);
+    ctx.beginPath();
+    for (let y = minY + gap / 2, row = 0; y < maxY; y += gap, row++) {
+      for (let x = minX + (row % 2 ? gap : gap / 2); x < maxX; x += gap) {
+        ctx.moveTo(x + r, y);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+      }
     }
     ctx.fill();
+    return;
   }
+  if (pattern === "waves") {
+    const gap = Math.max(9, cell * 0.5);
+    const len = Math.max(12, cell * 0.7);
+    const amp = Math.max(1.5, cell * 0.08);
+    ctx.beginPath();
+    for (let y = minY + gap / 2, row = 0; y < maxY; y += gap, row++) {
+      for (let x = minX - (row % 2 ? len / 2 : 0); x < maxX; x += len) {
+        ctx.moveTo(x, y);
+        ctx.quadraticCurveTo(x + len / 4, y - amp * 2, x + len / 2, y);
+        ctx.quadraticCurveTo(x + (3 * len) / 4, y + amp * 2, x + len, y);
+      }
+    }
+    ctx.stroke();
+    return;
+  }
+  const gap = Math.max(8, cell * 0.45);
+  const h = maxY - minY;
+  ctx.beginPath();
+  for (let x = minX - h; x < maxX; x += gap) {
+    ctx.moveTo(x, maxY);
+    ctx.lineTo(x + h, minY);
+  }
+  ctx.stroke();
+}
+
+/** A red flash on the terrain square a drag just bumped into; fades over BLOCK_FLASH seconds. */
+const BLOCK_FLASH = 0.6;
+function drawBlockedCell(ctx, world, camera, colors, blocked, now) {
+  if (!blocked) return;
+  const age = now - blocked.born;
+  if (age < 0 || age > BLOCK_FLASH) return;
+  const t = 1 - age / BLOCK_FLASH;
+  const c = cellCenter(world, blocked);
+  const p = worldToScreen(camera, c.x, c.y);
+  const size = world.config.grid.cellSize * camera.scale;
+  ctx.globalAlpha = t;
+  ctx.fillStyle = colors.blockedFill;
+  ctx.strokeStyle = colors.down;
+  ctx.lineWidth = Math.max(1.5, 2.5 * camera.scale);
+  ctx.beginPath();
+  ctx.rect(p.x - size / 2, p.y - size / 2, size, size);
+  ctx.fill();
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/** A terrain kind's colours; a plain string in the theme is taken as just a fill. */
+export function terrainStyle(colors, kind) {
+  const t = colors.terrain?.[kind];
+  if (!t) return { fill: colors.boundary };
+  return typeof t === "string" ? { fill: t } : t;
 }
 
 /** Shade everything outside the open part of the map (world.view). */
@@ -418,8 +544,19 @@ function drawOverload(ctx, world, camera, colors, site, k, now) {
   const { x, y } = worldToScreen(camera, site.x, site.y);
   const r = siteRadiusPx(world, site, camera) * 1.85;
   const fraction = Math.min(1, site.overload / world.config.overload.seconds);
-  // A slow, soft breathing pulse; a little quicker as the timer fills.
-  const pulse = 0.5 + 0.5 * Math.sin(now * (2.2 + fraction * 2.5));
+  const almostFull = world.outages && fraction >= (world.config.overload.warnAt ?? 0.7);
+  // A slow, soft breathing pulse; a little quicker as the timer fills, and
+  // quick once the site is almost full.
+  const pulse = 0.5 + 0.5 * Math.sin(now * (almostFull ? 9 : 2.2 + fraction * 2.5));
+  if (almostFull) {
+    // A soft red glow behind the ring, breathing with it.
+    ctx.globalAlpha = 0.25 * pulse;
+    ctx.fillStyle = colors.overload;
+    ctx.beginPath();
+    ctx.arc(x, y, r + THEME.sizes.overloadRing * k, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
   ctx.lineWidth = THEME.sizes.overloadRing * k;
   ctx.strokeStyle = colors.overloadTrack;
   ctx.beginPath();
@@ -431,6 +568,56 @@ function drawOverload(ctx, world, camera, colors, site, k, now) {
   ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
+}
+
+/**
+ * Where to put an arrow for a site that's off screen, or null if it's on
+ * screen. The arrow sits on the edge of the visible area (the screen minus
+ * the HUD `insets`), on the line from the centre towards the site.
+ */
+export function offscreenArrow(view, insets, p, margin) {
+  const i = insets ?? { top: 0, bottom: 0, left: 0, right: 0 };
+  const left = i.left + margin;
+  const right = view.width - i.right - margin;
+  const top = i.top + margin;
+  const bottom = view.height - i.bottom - margin;
+  if (right <= left || bottom <= top) return null;
+  if (p.x >= left && p.x <= right && p.y >= top && p.y <= bottom) return null;
+  const cx = (left + right) / 2;
+  const cy = (top + bottom) / 2;
+  const dx = p.x - cx;
+  const dy = p.y - cy;
+  const t = Math.min(dx ? (dx > 0 ? right - cx : left - cx) / dx : Infinity, dy ? (dy > 0 ? bottom - cy : top - cy) / dy : Infinity);
+  return { x: cx + dx * t, y: cy + dy * t, angle: Math.atan2(dy, dx) };
+}
+
+/** Arrows at the screen edge pointing to off-screen sites whose ring is filling. */
+function drawOffscreenArrows(ctx, view, world, camera, colors, insets, k, now) {
+  const size = 11 * k;
+  for (const site of world.sites) {
+    if (site.overload <= 0) continue;
+    const p = worldToScreen(camera, site.x, site.y);
+    const a = offscreenArrow(view, insets, p, size * 1.6);
+    if (!a) continue;
+    const fraction = Math.min(1, site.overload / world.config.overload.seconds);
+    const pulse = 0.5 + 0.5 * Math.sin(now * (3 + fraction * 6));
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(a.angle);
+    ctx.globalAlpha = 0.75 + 0.25 * pulse;
+    ctx.fillStyle = colors.overload;
+    ctx.strokeStyle = colors.siteOutline;
+    ctx.lineWidth = 2 * k;
+    ctx.beginPath();
+    ctx.moveTo(size, 0);
+    ctx.lineTo(-size * 0.7, -size * 0.75);
+    ctx.lineTo(-size * 0.35, 0);
+    ctx.lineTo(-size * 0.7, size * 0.75);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawSite(ctx, world, camera, colors, site, ui, k) {
