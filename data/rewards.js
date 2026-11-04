@@ -8,12 +8,30 @@
  *   detail   One line under the label.
  *   weight   Relative odds of being offered.
  *   fromWeek First week this can be offered (week 1 ends the first time).
+ *   icon     Optional: the inventory item whose icon the card shows
+ *            (otherwise the first key of grant).
  *   grant    What you get. Keys are inventory items from equipment.js
  *            (links, upgrades, switches, firewalls, sdwan, leased), plus
  *            capacity: extra queue capacity at every site (permanent).
  */
 export const REWARDS = [
-  { id: "links-12", label: "+12 links", detail: "Twelve more squares of link for the inventory.", weight: 3, fromWeek: 1, grant: { links: 12 } },
+  { id: "links-12", label: "+12 links", detail: "Twelve more squares of link for the inventory.", weight: 2, fromWeek: 1, grant: { links: 12 } },
+  {
+    id: "core-router",
+    label: "Core router",
+    detail: "Turn a jammed switch into one that never waits.",
+    weight: 3,
+    fromWeek: 2,
+    grant: { routers: 1 },
+  },
+  {
+    id: "switch-router",
+    label: "Switch + core router",
+    detail: "Build a new hub that can take a lot of links.",
+    weight: 1,
+    fromWeek: 3,
+    grant: { switches: 1, routers: 1 },
+  },
   {
     id: "fiber-switch",
     label: "Upgrade + switch",
@@ -53,4 +71,4 @@ export const REWARDS = [
 ];
 
 /** The grant keys the engine understands (checked by the validator). */
-export const REWARD_GRANTS = ["links", "upgrades", "switches", "firewalls", "sdwan", "leased", "capacity"];
+export const REWARD_GRANTS = ["links", "upgrades", "switches", "firewalls", "sdwan", "leased", "routers", "capacity"];

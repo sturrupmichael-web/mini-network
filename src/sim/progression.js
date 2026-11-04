@@ -54,6 +54,7 @@ export function updateProgression(world) {
     const s = world.config.spawn;
     world.trafficScale = Math.max(s.minIntervalScale, world.trafficScale * s.weeklyIntervalMultiplier);
     world.pendingReward = offerRewards(world);
+    grant(world, world.pendingReward.delivered);
     world.events.push({ type: "week", week: world.week });
   }
 
@@ -106,7 +107,10 @@ export function findSiteSpot(world) {
   return findSpot(world, { center: hub, radius: g.startRadius + g.radiusGrowthPerDay * clock(world).day });
 }
 
-/** Pick two different rewards for the week that just ended. */
+/**
+ * The end-of-week offer: the weekly delivery (granted straight away by
+ * updateProgression) plus two different rewards to pick from.
+ */
 export function offerRewards(world) {
   const finishedWeek = world.week - 1;
   const pool = world.data.rewards.filter((r) => r.fromWeek <= finishedWeek);
@@ -117,7 +121,15 @@ export function offerRewards(world) {
     options.push(pool[index].id);
     pool.splice(index, 1);
   }
-  return { week: finishedWeek, options };
+  return { week: finishedWeek, options, delivered: { ...(world.config.rewards?.weekly ?? {}) } };
+}
+
+/** Add a reward's grant (or the weekly delivery) to the inventory. */
+function grant(world, items) {
+  for (const [key, amount] of Object.entries(items)) {
+    if (key === "capacity") world.bonus.capacity += amount;
+    else world.inventory[key] = (world.inventory[key] ?? 0) + amount;
+  }
 }
 
 /** Player action: take one of the offered rewards. */
@@ -126,10 +138,7 @@ export function chooseReward(world, rewardId) {
     return { ok: false, reason: "not-offered" };
   }
   const reward = world.data.rewards.find((r) => r.id === rewardId);
-  for (const [key, amount] of Object.entries(reward.grant)) {
-    if (key === "capacity") world.bonus.capacity += amount;
-    else world.inventory[key] = (world.inventory[key] ?? 0) + amount;
-  }
+  grant(world, reward.grant);
   world.pendingReward = null;
   world.events.push({ type: "reward", rewardId });
   return { ok: true };

@@ -15,7 +15,7 @@ data/ (content + balance)       src/
   events.js           │            links.js     links, tiers, firewalls, leased lines
   equipment.js        │            packets.js   spawning, dispatch, movement, drops
   modes.js            │            routing.js   congestion-aware shortest paths, cut links
-  theme.js ───────┐   │            equipment.js switches, SD-WAN
+  theme.js ───────┐   │            equipment.js switches, core routers, SD-WAN
                   │   │            events.js    event schedule and effects
                   │   │            progression.js  clock, new sites, traffic growth, rewards
                   │   │            geometry.js  45°/90° metro paths, points along a path
@@ -84,6 +84,7 @@ land between ticks.
 | Drag (or tap, then tap) a bandwidth upgrade onto a link | `upgradeLink` |
 | ...a firewall onto a link | `addFirewall` |
 | ...an SD-WAN box onto a site | `addSdwan` |
+| ...a core router onto a switch | `addCoreRouter` |
 | ...a switch onto empty map / onto a link | `placeSwitch` / `placeSwitchOnLink` |
 | Tap a switch, then its × (or right-click it) | `removeSwitch` |
 | Pick a weekly reward | `chooseReward` |
@@ -104,6 +105,15 @@ land between ticks.
 - **Cuts and SD-WAN**: a cut link carries nothing. Sites with SD-WAN route
   around it at once; everyone else learns after
   `failover.convergenceSeconds`.
+- **Jammed switches**: a switch forwards one packet at a time, at
+  `switchRate` (`sites.js`): `switches.forwardRate`, slowed by
+  `switches.crowdPenalty` for every link past the second. `dispatchQueues`
+  holds packets at a switch until its `busyUntil`, and the existing queue
+  cost in routing steers traffic around it. `site.jam` (0–1, drawing only)
+  rises while packets wait and fades after; the renderer draws it as an
+  amber glow. A **core router** (`addCoreRouter`, the `routers` item) sets
+  `site.core`: `switches.coreForwardRate`, no crowd penalty, drawn purple
+  and a bit bigger. Removing the switch refunds the router.
 - **Hop limits**: traffic with `maxHops` (VoIP, payments) is dropped if it
   needs more hops: lost points plus `drops.overloadPenalty` on that site's ring.
 - **Day/night**: sites' `activity` multiplies their packet rate; traffic
@@ -167,8 +177,10 @@ land between ticks.
 
 - Days last `time.secondsPerDay` game seconds. Each new day adds
   `links.perDay` links.
-- Each week ends with a pause and two different rewards from
-  `data/rewards.js` (weighted, filtered by `fromWeek`). Traffic intervals
+- Each week ends with a pause. The weekly delivery (`rewards.weekly`, links
+  by default) goes straight into the inventory and is shown on the card,
+  then you pick one of two different rewards from `data/rewards.js`
+  (weighted, filtered by `fromWeek`). Cards show each grant as tray icons. Traffic intervals
   shrink by `spawn.weeklyIntervalMultiplier`.
 - New sites appear every `growth.interval` seconds, shrinking by
   `growth.intervalDecay` each time down to `growth.minInterval`. A spot is
@@ -251,7 +263,7 @@ commented in the file itself; this is the overview.
 | `sites.js` | `SITE_TYPES` | `{ id: { name, shape, color, size, capacity, packetInterval, traffic: { trafficId: weight }, activity: { day, night }, burst, unlockDay, junction? } }` |
 | `traffic.js` | `TRAFFIC_TYPES` | `{ id: { name, color, shape, size, to, points, unlockDay, hours, maxHops?, dropPoints?, cloudShare?, junk? } }` |
 | `maps.js` | `MAPS` | `[{ id, name, width, height, start: [{ type, x, y, label? }], boundaries: [[[x,y], …]] }]` |
-| `rewards.js` | `REWARDS` | `[{ id, label, detail, weight, fromWeek, grant: { links?, upgrades?, switches?, firewalls?, sdwan?, leased?, capacity? } }]` |
+| `rewards.js` | `REWARDS` | `[{ id, label, detail, weight, fromWeek, grant: { links?, upgrades?, switches?, firewalls?, sdwan?, leased?, routers?, capacity? } }]` |
 | `events.js` | `EVENTS` | `[{ id, name, toasts, effect, schedule: { day, every? } or { weekday, fromWeek }, duration, params }]` |
 | `equipment.js` | `LINK_TIERS`, `ITEMS` | Link tiers `{ id, name, bandwidth, width }`; tray items `{ name, hint, tip, target }` |
 | `maps.js` tuning | `tuning` | Per-map overrides of any `config.js` section |

@@ -19,6 +19,13 @@ const MENU_ICON = svg('<path d="M4 6h12M4 10h12M4 14h12"/>');
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+/** Little item icons with counts ("+12" next to a link) for a reward card. */
+function grantChips(entries) {
+  return entries
+    .map(([key, n]) => `<span class="reward-chip"><span class="tray-icon tray-icon-${escapeHtml(key)}"></span>+${Number(n)}</span>`)
+    .join("");
+}
+
 export function dayName(dayOfWeek) {
   return DAY_NAMES[dayOfWeek % DAY_NAMES.length];
 }
@@ -96,7 +103,8 @@ export function createHud(root, opts) {
     <div class="overlay" data-hud="reward" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="reward-title">
         <p class="card-kicker" data-hud="reward-kicker">Week 1 done</p>
-        <h2 id="reward-title">Pick a delivery</h2>
+        <p class="reward-delivered" data-hud="reward-delivered"></p>
+        <h2 id="reward-title">Pick one more</h2>
         <div class="reward-options" data-hud="reward-options"></div>
       </div>
     </div>
@@ -137,6 +145,7 @@ export function createHud(root, opts) {
     reward: q("reward"),
     rewardKicker: q("reward-kicker"),
     rewardOptions: q("reward-options"),
+    rewardDelivered: q("reward-delivered"),
     over: q("over"),
     overTitle: q("over-title"),
     overText: q("over-text"),
@@ -304,8 +313,10 @@ export function createHud(root, opts) {
           shown.inv[id] = n;
           counts[id].textContent = String(n);
           b.classList.toggle("empty", n === 0);
-          // Firewalls only show up once they matter; everything else always shows.
-          b.hidden = id === "firewalls" && n === 0 && !world.security;
+          // Firewalls only show up once they matter, and core routers once you
+          // have one; everything else always shows.
+          b.hidden =
+            (id === "firewalls" && n === 0 && !world.security) || (id === "routers" && n === 0 && !world.sites.some((s) => s.core));
           if (items[id].target) b.disabled = n === 0;
         }
       }
@@ -348,11 +359,17 @@ export function createHud(root, opts) {
         el.reward.hidden = !offer;
         if (offer) {
           el.rewardKicker.textContent = `Week ${offer.week} done`;
+          const delivered = Object.entries(offer.delivered ?? {});
+          el.rewardDelivered.hidden = delivered.length === 0;
+          el.rewardDelivered.innerHTML = delivered.length
+            ? `<span class="reward-delivered-label">Delivered</span>${grantChips(delivered)}`
+            : "";
           el.rewardOptions.innerHTML = offer.options
             .map((id) => {
               const r = world.data.rewards.find((x) => x.id === id);
               return `<button type="button" class="reward-btn" data-reward="${escapeHtml(r.id)}">
-                <strong>${escapeHtml(r.label)}</strong><span>${escapeHtml(r.detail)}</span></button>`;
+                <span class="reward-icons" aria-hidden="true">${grantChips(Object.entries(r.grant))}</span>
+                <strong>${escapeHtml(r.label)}</strong><span class="reward-detail">${escapeHtml(r.detail)}</span></button>`;
             })
             .join("");
           el.rewardOptions.querySelector("button")?.focus();

@@ -62,11 +62,24 @@ export const CONFIG = {
     firewalls: 0,
     sdwan: 0,
     leased: 1,
+    routers: 0,
   },
 
   switches: {
     /** Closest a switch may be placed to any site or other switch (wu). */
     minSpacing: 55,
+    /**
+     * Switches have to take turns: a switch forwards at most forwardRate
+     * size-1 packets per second, across all its links together. Every link
+     * beyond the second slows it down by crowdPenalty (0.25 = a quarter),
+     * so a switch with lots of links meeting at it jams first. Packets that
+     * are waiting their turn queue at the switch, and routing steers around
+     * long queues.
+     */
+    forwardRate: 4,
+    crowdPenalty: 0.25,
+    /** A switch upgraded to a core router forwards this many per second, however many links it has. */
+    coreForwardRate: 14,
   },
 
   failover: {
@@ -219,6 +232,15 @@ export const CONFIG = {
      * is filling.
      */
     warnAt: 0.7,
+  },
+
+  rewards: {
+    /**
+     * Delivered at the end of every week before you pick a reward, so the
+     * pick is always about what kind of help you want, never about links
+     * vs. nothing. Keys are inventory items (like a reward's grant).
+     */
+    weekly: { links: 8 },
   },
 
   time: {

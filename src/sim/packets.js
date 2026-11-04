@@ -4,7 +4,7 @@
  */
 import { linkBandwidth } from "./links.js";
 import { nextHop } from "./routing.js";
-import { currentDay, destinationExists, destKeyForTraffic, isNight, randomInterval, siteMatches } from "./sites.js";
+import { currentDay, destinationExists, destKeyForTraffic, isNight, randomInterval, siteMatches, switchRate } from "./sites.js";
 
 /** Create one packet waiting at `site`, heading for destination `to`. */
 export function createPacket(world, site, trafficId, to) {
@@ -82,13 +82,20 @@ function removePackets(world, ids) {
   world.packets = world.packets.filter((p) => !ids.has(p.id));
 }
 
+/** How fast a switch's jam glow builds while packets wait at it, and fades after (per second). */
+const JAM_RISE = 1.5;
+const JAM_FADE = 0.6;
+
 export function dispatchQueues(world) {
   const packetById = new Map();
   for (const p of world.packets) packetById.set(p.id, p);
   const gone = new Set();
 
   for (const site of world.sites) {
+    const junction = world.data.sites[site.type].junction;
+    if (junction) site.jam = Math.max(0, site.jam - world.dt * JAM_FADE);
     if (site.queue.length === 0) continue;
+    let held = false;
     const remaining = [];
     for (const packetId of site.queue) {
       const packet = packetById.get(packetId);
@@ -105,6 +112,13 @@ export function dispatchQueues(world) {
         remaining.push(packetId);
         continue;
       }
+      if (junction && world.time < site.busyUntil) {
+        // The switch is still forwarding the last packet: wait your turn.
+        held = true;
+        remaining.push(packetId);
+        continue;
+      }
+      if (junction) site.busyUntil = world.time + packet.size / switchRate(world, site);
       link.busyUntil[dir] = world.time + packet.size / linkBandwidth(world, link);
       if (traffic.junk && link.firewall) {
         // The firewall eats it, but checking it still costs bandwidth.
@@ -121,6 +135,7 @@ export function dispatchQueues(world) {
       packet.progress = 0;
     }
     site.queue = remaining;
+    if (held) site.jam = Math.min(1, site.jam + world.dt * (JAM_FADE + JAM_RISE));
   }
   removePackets(world, gone);
 }
