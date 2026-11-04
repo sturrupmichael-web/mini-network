@@ -109,7 +109,9 @@ Every field is commented in the file. The ones that matter most:
 | `growth.viewStart`, `growth.viewPerSite`, `growth.viewPadding` | How much of the map is open at the start, how much each new site opens up, and the room kept around every site |
 | `grid.cellSize` | Size of one grid square; smaller squares mean finer routes and more links per connection |
 | `links.bandwidth`, `links.packetSpeed` | How much a link carries and how fast packets move |
-| `inventory` | Starting equipment (upgrades, switches, firewalls, SD-WAN, leased lines) |
+| `inventory` | Starting equipment (upgrades, switches, firewalls, SD-WAN, leased lines, core routers) |
+| `switches.forwardRate`, `switches.crowdPenalty`, `switches.coreForwardRate` | How many packets a switch forwards per second, how much each extra link slows it, and how fast a core router is |
+| `rewards.weekly` | What arrives at the end of every week before you pick a reward |
 | `spawn.packetIntervalScale` | Global traffic rate: lower is busier |
 | `spawn.warmupDays`, `spawn.warmupScale` | The calm start: traffic begins this many times sparser and eases to normal over these days |
 | `spawn.newSiteGrace` | Seconds a new site waits before sending, so you can connect it |

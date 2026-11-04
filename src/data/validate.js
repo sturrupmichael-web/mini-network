@@ -65,6 +65,10 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
       if (!Number.isInteger(v) || v <= 0) err(`${at}.grant.${k} must be a whole number > 0`);
     }
   }
+  for (const [k, v] of Object.entries(config?.rewards?.weekly ?? {})) {
+    if (!(rewardGrants ?? []).includes(k)) err(`config.rewards.weekly has unknown key "${k}"`);
+    if (!Number.isInteger(v) || v <= 0) err(`config.rewards.weekly.${k} must be a whole number > 0`);
+  }
   if ((rewards ?? []).filter((r) => r.fromWeek === 1).length < 2) err("at least two rewards must be available from week 1");
 
   // Traffic types.

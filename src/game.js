@@ -15,6 +15,7 @@ import { configForMap } from "./sim/config.js";
 import { debugStats, grantItems, skipTime, spawnBurst, spawnSite } from "./sim/debug.js";
 import { chooseReward, clock } from "./sim/progression.js";
 import {
+  addCoreRouter,
   addFirewall,
   addLink,
   addSdwan,
@@ -56,6 +57,9 @@ const REFUSED_TEXT = {
   "on-boundary": "Switches can't sit on a carrier boundary.",
   "no-sdwan": "No SD-WAN boxes left.",
   "has-sdwan": "That site already has SD-WAN.",
+  "no-routers": "No core routers left.",
+  "not-a-switch": "Core routers go on switches.",
+  "has-router": "That switch is already a core router.",
 };
 
 /**
@@ -421,6 +425,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     if (item === "upgrades" && target.kind === "link") return upgradeLink(world, target.id);
     if (item === "firewalls" && target.kind === "link") return addFirewall(world, target.id);
     if (item === "sdwan" && target.kind === "site") return addSdwan(world, target.id);
+    if (item === "routers" && target.kind === "site") return addCoreRouter(world, target.id);
     if (item === "switches" && target.kind === "link") return placeSwitchOnLink(world, target.id, target.x, target.y);
     if (item === "switches" && target.kind === "spot") return placeSwitch(world, target.x, target.y);
     return { ok: false, reason: "bad-target" };

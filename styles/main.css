@@ -220,6 +220,21 @@ body {
   background: radial-gradient(circle, transparent 0 3px, #fff 3px 4.5px, transparent 4.5px), #13a8b5;
 }
 
+.tray-icon-routers {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  background: radial-gradient(circle, #fff 0 2px, transparent 2.4px), radial-gradient(circle, transparent 0 5px, #fff 5px 6.4px, transparent 6.8px), #7b5cd6;
+}
+
+.tray-icon-capacity {
+  /* A queue getting longer: three waiting packets. */
+  width: 20px;
+  height: 8px;
+  background: radial-gradient(circle at 4px 50%, var(--ink) 0 3px, transparent 3.4px), radial-gradient(circle at 10px 50%, var(--ink) 0 3px, transparent 3.4px),
+    radial-gradient(circle at 16px 50%, var(--ink) 0 3px, transparent 3.4px);
+}
+
 .tray-icon-leased {
   width: 22px;
   height: 8px;
@@ -428,9 +443,44 @@ body {
   color: var(--muted);
 }
 
+.reward-delivered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.reward-delivered-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .reward-options {
   display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.reward-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-height: 24px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.reward-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .reward-btn {
@@ -457,9 +507,25 @@ body {
   font-size: 16px;
 }
 
-.reward-btn span {
+.reward-btn .reward-detail {
   font-size: 13px;
   color: var(--muted);
+}
+
+.reward-btn {
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.reward-btn:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reward-btn,
+  .reward-btn:hover {
+    transition: none;
+    transform: none;
+  }
 }
 
 .stats {

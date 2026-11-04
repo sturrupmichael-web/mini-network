@@ -633,6 +633,22 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
     ui.drag?.fromSiteId === site.id ||
     ui.reroute?.overSiteId === site.id ||
     ui.selectedSiteId === site.id;
+  if (site.jam > 0.02 && !site.core) {
+    // A jammed switch glows amber, pulsing gently, so you can spot the bottleneck.
+    const pulse = 0.75 + 0.25 * Math.sin(world.time * 5);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, site.jam) * pulse;
+    ctx.fillStyle = colors.jam;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = colors.firewall;
+    ctx.lineWidth = 2.5 * k;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
   if (highlighted) {
     ctx.fillStyle = colors.highlight;
     ctx.beginPath();
@@ -668,9 +684,11 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
       ctx.arc(x + r * 0.5, y + r * 0.15, r * 0.55, Math.PI * 1.5, Math.PI * 0.5);
       ctx.closePath();
       break;
-    case "switch":
-      ctx.roundRect(x - r, y - r, r * 2, r * 2, r * 0.45);
+    case "switch": {
+      const s = site.core ? r * 1.2 : r;
+      ctx.roundRect(x - s, y - s, s * 2, s * 2, s * 0.45);
       break;
+    }
     default:
       ctx.arc(x, y, r, 0, Math.PI * 2);
   }
@@ -679,12 +697,24 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
   ctx.strokeStyle = colors.siteShadow;
   ctx.lineWidth = (THEME.sizes.siteStroke + 2) * k;
   ctx.stroke();
-  ctx.fillStyle = def.color;
+  ctx.fillStyle = site.core ? colors.core : def.color;
   ctx.fill();
   ctx.strokeStyle = colors.siteOutline;
   ctx.lineWidth = THEME.sizes.siteStroke * k;
   ctx.stroke();
-  if (def.shape === "switch") {
+  if (def.shape === "switch" && site.core) {
+    // A core router: a ring of ports round a centre.
+    ctx.fillStyle = colors.siteFill;
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62, r * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (def.shape === "switch") {
     // Four little ports.
     ctx.fillStyle = colors.siteFill;
     for (const dx of [-0.4, 0.4]) {

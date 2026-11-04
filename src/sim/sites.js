@@ -53,6 +53,12 @@ export function addSite(world, type, x, y, label = null) {
     overload: 0,
     born: world.time,
     sdwan: false,
+    /** Switches only: upgraded to a core router (see switchRate). */
+    core: false,
+    /** Switches only: game time the switch is free to forward the next packet. */
+    busyUntil: 0,
+    /** Switches only, for drawing: 0–1, how jammed it has been lately. */
+    jam: 0,
     nextSpawn: def.packetInterval
       ? world.time + (world.tick > 0 ? (world.config.spawn.newSiteGrace ?? 0) : world.config.spawn.graceSeconds) + randomInterval(world, def)
       : Infinity,
@@ -69,6 +75,16 @@ export function deleteSite(world, siteId) {
   world.sites = world.sites.filter((s) => s.id !== siteId);
   world.siteById.delete(siteId);
   world.routing.dirty = true;
+}
+
+/**
+ * Size-1 packets per second a switch can forward, across all its links.
+ * Plain switches slow down as more links meet at them; core routers don't.
+ */
+export function switchRate(world, site) {
+  const c = world.config.switches;
+  if (site.core) return c.coreForwardRate;
+  return c.forwardRate / (1 + c.crowdPenalty * Math.max(0, site.links.length - 2));
 }
 
 /** Packets a site can queue before it starts to overload. */

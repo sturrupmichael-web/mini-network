@@ -82,9 +82,24 @@ export function placeSwitchOnLink(world, linkId, x, y) {
   return { ok: true, site };
 }
 
+/** Player action: upgrade a switch to a core router, so it never jams. */
+export function addCoreRouter(world, siteId) {
+  if (world.over) return { ok: false, reason: "over" };
+  const site = world.siteById.get(siteId);
+  if (!site) return { ok: false, reason: "unknown-site" };
+  if (!world.data.sites[site.type].junction) return { ok: false, reason: "not-a-switch" };
+  if (site.core) return { ok: false, reason: "has-router" };
+  if (world.inventory.routers <= 0) return { ok: false, reason: "no-routers" };
+  site.core = true;
+  site.busyUntil = 0;
+  world.inventory.routers--;
+  world.events.push({ type: "router-added", siteId });
+  return { ok: true };
+}
+
 /**
  * Player action: remove a switch. Its links come back (refunded) and so
- * does the switch. Packets waiting at it are lost.
+ * does the switch (and its core router, if it had one). Packets waiting at it are lost.
  */
 export function removeSwitch(world, siteId) {
   if (world.over) return { ok: false, reason: "over" };
@@ -96,6 +111,7 @@ export function removeSwitch(world, siteId) {
   world.stats.lost += lost.size;
   deleteSite(world, siteId);
   world.inventory.switches++;
+  if (site.core) world.inventory.routers++;
   world.events.push({ type: "switch-removed", siteId });
   return { ok: true };
 }
