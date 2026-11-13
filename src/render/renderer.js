@@ -684,6 +684,19 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
       ctx.arc(x + r * 0.5, y + r * 0.15, r * 0.55, Math.PI * 1.5, Math.PI * 0.5);
       ctx.closePath();
       break;
+    case "district": {
+      // A rounded square with a notch of a roof: a hub for one kind of site.
+      const s = r * 1.05;
+      ctx.moveTo(x - s, y - s * 0.55);
+      ctx.lineTo(x, y - s * 1.15);
+      ctx.lineTo(x + s, y - s * 0.55);
+      ctx.lineTo(x + s, y + s * 0.75);
+      ctx.quadraticCurveTo(x + s, y + s, x + s * 0.75, y + s);
+      ctx.lineTo(x - s * 0.75, y + s);
+      ctx.quadraticCurveTo(x - s, y + s, x - s, y + s * 0.75);
+      ctx.closePath();
+      break;
+    }
     case "switch": {
       const s = site.core ? r * 1.2 : r;
       ctx.roundRect(x - s, y - s, s * 2, s * 2, s * 0.45);
@@ -738,12 +751,31 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
     ctx.arc(bx, by, 2 * k, Math.PI * 0.2, Math.PI * 1.6);
     ctx.stroke();
   }
-  if ((def.shape === "hub" || def.shape === "edge") && site.label) {
+  if ((def.shape === "hub" || def.shape === "edge" || def.shape === "district") && site.label) {
     ctx.fillStyle = colors.hubText;
-    ctx.font = `600 ${Math.round(r * 0.75)}px system-ui, sans-serif`;
+    ctx.font = `600 ${Math.round(r * (def.shape === "district" ? 0.62 : 0.75))}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(site.label, x, y + 0.5);
+    ctx.fillText(site.label, x, y + (def.shape === "district" ? r * 0.12 : 0.5));
+  }
+  if (site.qos) {
+    // A QoS policy: a little badge with a "fast lane" chevron, top right.
+    const s = site.core ? r * 1.2 : r;
+    const bx = x + s * 1.05;
+    const by = y - s * 1.05;
+    ctx.fillStyle = colors.qos;
+    ctx.beginPath();
+    ctx.arc(bx, by, 5 * k, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = colors.siteFill;
+    ctx.lineWidth = 1.6 * k;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(bx - 1.8 * k, by - 2.4 * k);
+    ctx.lineTo(bx + 1.4 * k, by);
+    ctx.lineTo(bx - 1.8 * k, by + 2.4 * k);
+    ctx.stroke();
+    ctx.lineCap = "butt";
   }
 }
 

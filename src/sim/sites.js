@@ -55,6 +55,8 @@ export function addSite(world, type, x, y, label = null) {
     sdwan: false,
     /** Switches only: upgraded to a core router (see switchRate). */
     core: false,
+    /** Switches only: has a QoS policy (priority traffic goes first). */
+    qos: false,
     /** Switches only: game time the switch is free to forward the next packet. */
     busyUntil: 0,
     /** Switches only, for drawing: 0–1, how jammed it has been lately. */
@@ -85,6 +87,16 @@ export function switchRate(world, site) {
   const c = world.config.switches;
   if (site.core) return c.coreForwardRate;
   return c.forwardRate / (1 + c.crowdPenalty * Math.max(0, site.links.length - 2));
+}
+
+/**
+ * Seconds a switch is busy forwarding this packet. With a QoS policy,
+ * priority traffic is quicker and everything else slower.
+ */
+export function switchTime(world, site, packet) {
+  let t = packet.size / switchRate(world, site);
+  if (site.qos) t *= world.data.traffic[packet.traffic].priority ? world.config.qos.priorityCost : world.config.qos.otherCost;
+  return t;
 }
 
 /** Packets a site can queue before it starts to overload. */

@@ -82,24 +82,43 @@ export function placeSwitchOnLink(world, linkId, x, y) {
   return { ok: true, site };
 }
 
-/** Player action: upgrade a switch to a core router, so it never jams. */
-export function addCoreRouter(world, siteId) {
+/**
+ * Switch add-ons: inventory item → the flag it sets on a switch, and the
+ * reasons used when it can't go there.
+ */
+const SWITCH_ADDONS = {
+  routers: { flag: "core", has: "has-router", none: "no-routers", event: "router-added" },
+  qos: { flag: "qos", has: "has-qos", none: "no-qos", event: "qos-added" },
+};
+
+function addToSwitch(world, siteId, item) {
+  const addon = SWITCH_ADDONS[item];
   if (world.over) return { ok: false, reason: "over" };
   const site = world.siteById.get(siteId);
   if (!site) return { ok: false, reason: "unknown-site" };
   if (!world.data.sites[site.type].junction) return { ok: false, reason: "not-a-switch" };
-  if (site.core) return { ok: false, reason: "has-router" };
-  if (world.inventory.routers <= 0) return { ok: false, reason: "no-routers" };
-  site.core = true;
+  if (site[addon.flag]) return { ok: false, reason: addon.has };
+  if (world.inventory[item] <= 0) return { ok: false, reason: addon.none };
+  site[addon.flag] = true;
   site.busyUntil = 0;
-  world.inventory.routers--;
-  world.events.push({ type: "router-added", siteId });
+  world.inventory[item]--;
+  world.events.push({ type: addon.event, siteId });
   return { ok: true };
+}
+
+/** Player action: upgrade a switch to a core router, so it never jams. */
+export function addCoreRouter(world, siteId) {
+  return addToSwitch(world, siteId, "routers");
+}
+
+/** Player action: give a switch a QoS policy (priority traffic first). */
+export function addQos(world, siteId) {
+  return addToSwitch(world, siteId, "qos");
 }
 
 /**
  * Player action: remove a switch. Its links come back (refunded) and so
- * does the switch (and its core router, if it had one). Packets waiting at it are lost.
+ * does the switch (and its core router and QoS policy, if it had them). Packets waiting at it are lost.
  */
 export function removeSwitch(world, siteId) {
   if (world.over) return { ok: false, reason: "over" };
@@ -111,7 +130,7 @@ export function removeSwitch(world, siteId) {
   world.stats.lost += lost.size;
   deleteSite(world, siteId);
   world.inventory.switches++;
-  if (site.core) world.inventory.routers++;
+  for (const [item, addon] of Object.entries(SWITCH_ADDONS)) if (site[addon.flag]) world.inventory[item]++;
   world.events.push({ type: "switch-removed", siteId });
   return { ok: true };
 }

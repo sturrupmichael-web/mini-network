@@ -20,7 +20,7 @@ import { updateView } from "./view.js";
 
 export { addSite, siteCapacity } from "./sites.js";
 export { addFirewall, addLink, findLink, removeLink, rerouteLink, upgradeLink } from "./links.js";
-export { addCoreRouter, addSdwan, placeSwitch, placeSwitchOnLink, removeSwitch } from "./equipment.js";
+export { addCoreRouter, addQos, addSdwan, placeSwitch, placeSwitchOnLink, removeSwitch } from "./equipment.js";
 export { chooseReward } from "./progression.js";
 export { setEventSchedule, triggerEvent } from "./events.js";
 
@@ -154,7 +154,7 @@ export function snapshot(world) {
     stats: world.stats,
     dayStress: world.dayStress,
     inventory: world.inventory,
-    sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan, s.core, s.busyUntil]),
+    sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan, s.core, s.qos, s.busyUntil]),
     links: world.links.map((l) => [l.id, l.a, l.b, l.busyUntil, l.inTransit, l.tier, l.firewall, l.leased, l.down]),
     packets: world.packets.map((p) => [p.id, p.traffic, p.to, p.at, p.linkId, p.dir, p.progress, p.hops]),
   });

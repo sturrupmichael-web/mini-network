@@ -85,6 +85,7 @@ land between ticks.
 | ...a firewall onto a link | `addFirewall` |
 | ...an SD-WAN box onto a site | `addSdwan` |
 | ...a core router onto a switch | `addCoreRouter` |
+| ...a QoS policy onto a switch | `addQos` |
 | ...a switch onto empty map / onto a link | `placeSwitch` / `placeSwitchOnLink` |
 | Tap a switch, then its × (or right-click it) | `removeSwitch` |
 | Pick a weekly reward | `chooseReward` |
@@ -114,6 +115,17 @@ land between ticks.
   amber glow. A **core router** (`addCoreRouter`, the `routers` item) sets
   `site.core`: `switches.coreForwardRate`, no crowd penalty, drawn purple
   and a bit bigger. Removing the switch refunds the router.
+- **QoS policies** (`addQos`, the `qos` item) set `site.qos` on a switch.
+  `dispatchQueues` then looks at `priority` traffic (VoIP, payments) first,
+  and `switchTime` scales its switching time by `qos.priorityCost` and
+  everything else by `qos.otherCost`. Drawn as a teal chevron badge.
+- **Districts**: the `district` event effect opens a district hub
+  (`logistics`, `payhub`: `shape: "district"`, labelled) with `farSpot`.
+  ERP and payments go to `["datacenter", "logistics"]` /
+  `["datacenter", "payhub"]`, whichever is cheaper. Site types with a
+  `district` (warehouse, retail) appear within `districts.radius` of one of
+  their hubs `districts.chance` of the time (`findSiteSpot(world, type)`;
+  new sites now pick their type before their spot).
 - **Hop limits**: traffic with `maxHops` (VoIP, payments) is dropped if it
   needs more hops: lost points plus `drops.overloadPenalty` on that site's ring.
 - **Day/night**: sites' `activity` multiplies their packet rate; traffic

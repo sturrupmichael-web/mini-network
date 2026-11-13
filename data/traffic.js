@@ -20,6 +20,8 @@
  *              dropped: you lose dropPoints and the site where it dropped
  *              gets an overload penalty (config.drops).
  *   dropPoints Points lost per drop.
+ *   priority   true for traffic a QoS policy sends first (latency-sensitive
+ *              calls and card payments).
  *   cloudShare true if it moves to the cloud after a cloud migration.
  *   junk       true for attack traffic: firewalls filter it out, and it
  *              scores nothing.
@@ -41,7 +43,7 @@ export const TRAFFIC_TYPES = {
     color: "#f2994a",
     shape: "square",
     size: 1,
-    to: "datacenter",
+    to: ["datacenter", "logistics"],
     points: 1,
     unlockDay: 0,
     hours: "any",
@@ -51,12 +53,13 @@ export const TRAFFIC_TYPES = {
     color: "#27ae60",
     shape: "triangle",
     size: 0.6,
-    to: "datacenter",
+    to: ["datacenter", "payhub"],
     points: 2,
     unlockDay: 0,
     hours: "any",
     maxHops: 3,
     dropPoints: 2,
+    priority: true,
   },
   voip: {
     name: "VoIP",
@@ -69,6 +72,7 @@ export const TRAFFIC_TYPES = {
     hours: "day",
     maxHops: 3,
     dropPoints: 1,
+    priority: true,
   },
   video: {
     name: "Video",

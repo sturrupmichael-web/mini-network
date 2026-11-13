@@ -227,6 +227,27 @@ body {
   background: radial-gradient(circle, #fff 0 2px, transparent 2.4px), radial-gradient(circle, transparent 0 5px, #fff 5px 6.4px, transparent 6.8px), #7b5cd6;
 }
 
+.tray-icon-qos {
+  /* A fast-lane chevron on a teal badge. */
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #13a8b5;
+  position: relative;
+}
+
+.tray-icon-qos::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 4.5px;
+  width: 5px;
+  height: 5px;
+  border-top: 2px solid #fff;
+  border-right: 2px solid #fff;
+  transform: rotate(45deg);
+}
+
 .tray-icon-capacity {
   /* A queue getting longer: three waiting packets. */
   width: 20px;

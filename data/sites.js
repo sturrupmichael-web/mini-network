@@ -4,7 +4,8 @@
  * Fields:
  *   name            Display name.
  *   shape           How it is drawn: "hub" | "circle" | "square" |
- *                   "triangle" | "cloud" | "edge" | "switch".
+ *                   "triangle" | "cloud" | "edge" | "switch" |
+ *                   "district".
  *   color           Fill colour (any CSS colour). Each type has its own so
  *                   you can tell sites apart at a glance; all get a white
  *                   outline.
@@ -24,6 +25,11 @@
  *   unlockDay       First day (0-based) new sites of this type can appear.
  *   junction        true for switches: placed by the player, routes traffic
  *                   but never creates or receives it.
+ *   district        Optional: a destination site type this kind of site
+ *                   clusters around. Once one is on the map, most new sites
+ *                   of this kind appear near it (config.districts).
+ *   label           Optional short text drawn on "hub" and "district" sites
+ *                   that arrive during play.
  */
 export const SITE_TYPES = {
   datacenter: {
@@ -61,6 +67,7 @@ export const SITE_TYPES = {
     activity: { day: 1.4, night: 0.25 },
     burst: { chance: 0.18, min: 3, max: 5 },
     unlockDay: 2,
+    district: "logistics",
   },
   retail: {
     name: "Retail branch",
@@ -73,6 +80,33 @@ export const SITE_TYPES = {
     activity: { day: 1.3, night: 0.3 },
     burst: null,
     unlockDay: 4,
+    district: "payhub",
+  },
+  logistics: {
+    name: "Logistics hub",
+    shape: "district",
+    color: "#c2601a",
+    size: 1.3,
+    capacity: 36,
+    packetInterval: null,
+    traffic: {},
+    activity: { day: 1, night: 1 },
+    burst: null,
+    unlockDay: 0,
+    label: "ERP",
+  },
+  payhub: {
+    name: "Payment gateway",
+    shape: "district",
+    color: "#1f8a50",
+    size: 1.3,
+    capacity: 36,
+    packetInterval: null,
+    traffic: {},
+    activity: { day: 1, night: 1 },
+    burst: null,
+    unlockDay: 0,
+    label: "PAY",
   },
   cloud: {
     name: "Cloud region",

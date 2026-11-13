@@ -13,6 +13,8 @@
  *               "cloudMigration" a cloud region appears; some traffic moves there
  *               "securityRules"  an internet edge appears; its links need firewalls
  *               "ddos"           the internet edge floods with junk traffic
+ *               "district"       a district hub (params.type) opens far from HQ;
+ *                                its kind of site clusters around it
  *   schedule  When it fires. Days are 0-based (day 0 is the first Monday).
  *               { day: 8 }                       once, on that day
  *               { day: 4, every: [5, 8] }        then again every 5–8 days
@@ -64,6 +66,31 @@ export const EVENTS = [
     duration: 0,
     // count: sites in the cluster; types: odds of each site type.
     params: { count: 3, types: { office: 2, warehouse: 1, retail: 1 } },
+  },
+  {
+    id: "logistics-hub",
+    name: "Logistics hub",
+    toasts: [
+      "The warehouses got their own ERP hub. Warehouses nearby can send to it instead of HQ.",
+      "Operations opened a logistics hub. New warehouses will set up around it.",
+    ],
+    effect: "district",
+    schedule: { day: 9 },
+    duration: 0,
+    // type: the district hub's site type (sites.js).
+    params: { type: "logistics" },
+  },
+  {
+    id: "payment-gateway",
+    name: "Payment gateway",
+    toasts: [
+      "Finance stood up a payment gateway. Shops can pay through it instead of HQ.",
+      "A payment gateway went live. New shops will open around it.",
+    ],
+    effect: "district",
+    schedule: { day: 15 },
+    duration: 0,
+    params: { type: "payhub" },
   },
   {
     id: "security-rules",

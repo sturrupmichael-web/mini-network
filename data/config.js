@@ -63,6 +63,7 @@ export const CONFIG = {
     sdwan: 0,
     leased: 1,
     routers: 0,
+    qos: 0,
   },
 
   switches: {
@@ -80,6 +81,16 @@ export const CONFIG = {
     crowdPenalty: 0.25,
     /** A switch upgraded to a core router forwards this many per second, however many links it has. */
     coreForwardRate: 14,
+  },
+
+  qos: {
+    /**
+     * A switch with a QoS policy sends priority traffic (VoIP, payments)
+     * first, and it takes this fraction of the usual switching time...
+     */
+    priorityCost: 0.5,
+    /** ...while everything else takes this much longer than usual (the catch). */
+    otherCost: 1.3,
   },
 
   failover: {
@@ -211,6 +222,16 @@ export const CONFIG = {
      * A type only appears once its unlockDay (in sites.js) has passed.
      */
     types: { office: 5, warehouse: 2, retail: 2 },
+  },
+
+  districts: {
+    /**
+     * Once a district hub (a logistics hub, a payment gateway) is on the
+     * map, a new site of the kind that clusters around it (see `district`
+     * in sites.js) appears within `radius` (wu) of it this often...
+     */
+    chance: 0.7,
+    radius: 260,
   },
 
   overload: {
