@@ -78,7 +78,7 @@ export const tests = [
   }],
   ["share text has the date, score, and a day grid", () => {
     const text = shareText({ key: "2026-10-31", mapName: "Campus", score: 321, days: 9.4, dayStress: [0, 0.1, 0.3, 0.8, 0.2, 0, 0, 0.5, 1] });
-    assert.match(text, /Mini Network daily 2026-10-31/);
+    assert.match(text, /Nano Networks daily 2026-10-31/);
     assert.match(text, /Campus: 321 delivered, survived 1w 2d/);
     const grid = text.split("\n").slice(2);
     assert.deepEqual(grid, ["🟩🟩🟨🟥🟩🟩🟩", "🟨🟥"]);

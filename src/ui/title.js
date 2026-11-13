@@ -25,7 +25,7 @@ export function createTitle(root, opts) {
   root.innerHTML = `
     <div class="overlay title-screen" data-title="screen" hidden>
       <div class="card title-card" role="dialog" aria-modal="true" aria-labelledby="title-heading">
-        <h1 id="title-heading" class="title-logo"><span class="logo-dot"></span>Mini Network</h1>
+        <h1 id="title-heading" class="title-logo"><span class="logo-dot"></span>Nano Networks</h1>
         <p class="title-tagline">Link the sites. Keep the traffic flowing. Don't let anything melt.</p>
         <div class="segmented" role="radiogroup" aria-label="Mode">
           ${Object.entries(modes)

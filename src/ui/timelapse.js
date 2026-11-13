@@ -20,7 +20,8 @@ export function playTimelapse(canvas, frames, siteTypes) {
   const start = performance.now();
   const total = frames.length * FRAME_SECONDS + HOLD_SECONDS;
   const tick = (now) => {
-    const t = ((now - start) / 1000) % total;
+    // rAF's timestamp is when the frame began, which can be a moment before `start`.
+    const t = (Math.max(0, now - start) / 1000) % total;
     const index = reduced ? frames.length - 1 : Math.min(frames.length - 1, Math.floor(t / FRAME_SECONDS));
     drawFrame(canvas, frames, index, siteTypes);
     if (!reduced) raf = requestAnimationFrame(tick);
@@ -101,7 +102,7 @@ export function drawFrame(canvas, frames, index, siteTypes) {
 }
 
 /** Download the final frame as a PNG. */
-export function saveImage(canvas, frames, siteTypes, filename = "mini-network.png") {
+export function saveImage(canvas, frames, siteTypes, filename = "nano-networks.png") {
   drawFrame(canvas, frames, frames.length - 1, siteTypes);
   const a = document.createElement("a");
   a.href = canvas.toDataURL("image/png");

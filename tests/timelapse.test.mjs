@@ -21,6 +21,6 @@ export const tests = [
     assert(size.w > 0 && size.h > 0, "drawn");
     const download = page.waitForEvent("download");
     await page.click('[data-hud="save-image"]');
-    assert((await download).suggestedFilename() === "mini-network.png", "saves a png");
+    assert((await download).suggestedFilename() === "nano-networks.png", "saves a png");
   }],
 ];

@@ -1,4 +1,4 @@
-# Mini Network architecture
+# Nano Networks architecture
 
 This is the map of the code as of Phase 5. It's meant to stay current as
 phases land.

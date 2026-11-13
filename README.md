@@ -1,4 +1,8 @@
-# Mini Network
+# Nano Networks
+
+(Formerly Mini Network. The repo, the `/mini-network/` web address, the
+`miniNetwork:` storage keys and the `window.miniNetwork` test handle keep
+the old name, so links, saved scores and settings carry over.)
 
 A minimal network-building puzzle game for the browser. Offices, warehouses
 and shops pop up on a map and start sending traffic; you draw links to keep
@@ -189,7 +193,7 @@ days and saves a WebP). It goes in `sturrupmichael-web.github.io` at
 
 ```json
 {
-  "title": "Mini Network",
+  "title": "Nano Networks",
   "slug": "mini-network",
   "description": "Keep a growing company online: draw links between offices, warehouses and shops, add switches and firewalls, and survive cut cables, patch days and a DDoS before a site's queue overflows.",
   "url": "https://michaelsturrup.com/mini-network/",

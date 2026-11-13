@@ -1,5 +1,5 @@
 /**
- * Mini Network balance and engine configuration.
+ * Nano Networks balance and engine configuration.
  *
  * Everything you might want to tune lives here (or in the other files in
  * data/). The engine never hard-codes a balance number.
