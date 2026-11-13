@@ -228,6 +228,43 @@ export function makeBackbone(world, linkId) {
   return { ok: true };
 }
 
+/**
+ * Player action: drag a link to a new path through the grid square at
+ * `waypoint` ({ x, y } in world units), keeping everything else about it
+ * (tier, firewall, colour). It takes the straightest clear way from one
+ * end to the waypoint and on to the other end. The squares and leased
+ * lines it needs are settled against the old path: extra ones come out of
+ * the inventory, spare ones go back.
+ */
+export function reshapeLink(world, linkId, waypoint) {
+  if (world.over) return { ok: false, reason: "over" };
+  const link = world.linkById.get(linkId);
+  if (!link) return { ok: false, reason: "unknown-link" };
+  if (link.backbone) return { ok: false, reason: "backbone" };
+  const a = world.siteById.get(link.a);
+  const b = world.siteById.get(link.b);
+  const first = autoCells(world, a, waypoint);
+  const second = autoCells(world, waypoint, b);
+  if (!first || !second) return { ok: false, reason: "no-way" };
+  const route = [...first, ...second.slice(1)];
+  const problem = pathProblem(world, route, a, b);
+  if (problem) return { ok: false, reason: problem === "bad-path" ? "no-way" : problem };
+  const cost = cellCost(route);
+  if (cost - link.cost > world.inventory.links) return { ok: false, reason: "no-links" };
+  const path = cellsToPath(world, route);
+  const leased = boundaryCrossings(world, path);
+  if (leased - link.leased > world.inventory.leased) return { ok: false, reason: "no-leased" };
+  world.inventory.links -= cost - link.cost;
+  world.inventory.leased -= leased - link.leased;
+  // Packets on it keep their place as a fraction of the way along.
+  const length = pathLength(path);
+  for (const p of world.packets) if (p.linkId === linkId) p.progress = (p.progress / link.length) * length;
+  Object.assign(link, { cells: route.map((c) => ({ cx: c.cx, cy: c.cy })), cost, path, length, leased });
+  world.routing.dirty = true;
+  world.events.push({ type: "link-reshaped", linkId });
+  return { ok: true, link };
+}
+
 /** Player action: move a link up one bandwidth tier. */
 export function upgradeLink(world, linkId) {
   if (world.over) return { ok: false, reason: "over" };

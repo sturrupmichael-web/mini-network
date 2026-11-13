@@ -3,6 +3,7 @@
  * and the weekly reward. Part of the simulation (no DOM).
  */
 import { scheduleDay } from "./events.js";
+import { recordFrame } from "./history.js";
 import { distanceToPolyline } from "./geometry.js";
 import { cellOf, inView, isTerrain, snapToGrid } from "./grid.js";
 
@@ -46,6 +47,7 @@ export function updateProgression(world) {
     world.inventory.links += world.config.links.perDay;
     world.events.push({ type: "day", day });
     scheduleDay(world, day);
+    recordFrame(world);
   }
 
   const weekEnd = world.week * daysPerWeek * secondsPerDay;

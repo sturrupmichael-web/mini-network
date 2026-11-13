@@ -28,6 +28,7 @@ import {
   removeLink,
   removeSwitch,
   rerouteLink,
+  reshapeLink,
   snapshot,
   step,
   triggerEvent,
@@ -457,6 +458,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       connect: (a, b, line, cells) => addLink(world, a, b, line, cells),
       remove: (linkId) => removeLink(world, linkId),
       reroute: (linkId, siteId) => rerouteLink(world, linkId, siteId),
+      reshape: (linkId, spot) => reshapeLink(world, linkId, spot),
       removeSite: (siteId) => removeSwitch(world, siteId),
       place: (item, target) => {
         const r = place(item, target);

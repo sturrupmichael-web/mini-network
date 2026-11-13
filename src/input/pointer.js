@@ -32,6 +32,7 @@ import { removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemoveButtonPos 
  * @param {object} opts.ui           Shared UI state the renderer reads.
  * @param {() => boolean} opts.canEdit  False while the game is over or a dialog is open.
  * @param {object} opts.actions      { connect(a, b, line, cells), remove(linkId), reroute(linkId, siteId),
+ *                                    reshape(linkId, { x, y }),
  *                                    lineFor(siteId), removeSite(siteId), place(item, target) }
  * @param {object} opts.items        ITEMS from equipment.js (what each tray item targets).
  * @param {(reason: string) => void} [opts.onRefused]
@@ -350,9 +351,12 @@ export function attachPointerInput(canvas, opts) {
     if (press && e.pointerId === press.pointerId) {
       if (ui.reroute) {
         const target = ui.reroute.overSiteId;
-        if (target !== null && e.type === "pointerup" && canEdit()) {
-          const result = actions.reroute(press.linkId, target);
-          if (!result.ok && result.reason !== "same-site") refuse(result.reason);
+        const spot = ui.reroute.pointerWorld;
+        if (e.type === "pointerup" && canEdit()) {
+          // Dropped on a site: run the link through it. Anywhere else: bend
+          // the link's path through that square.
+          const result = target !== null ? actions.reroute(press.linkId, target) : spot ? actions.reshape(press.linkId, spot) : null;
+          if (result && !result.ok && result.reason !== "same-site") refuse(result.reason);
         }
         ui.reroute = null;
       } else if (e.type === "pointerup") {

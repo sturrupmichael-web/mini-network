@@ -74,6 +74,42 @@ export const tests = [
     assert(has(offices[0].id, offices[1].id) && has(offices[1].id, hub.id), "A–C–B");
     assert(links.every((l) => l.line === link.line), "same colour");
   }],
+  ["drag a link onto empty map to bend it through there", async (t) => {
+    const page = await t.open();
+    const { hub, offices } = await setup(page);
+    await mouseDrag(page, [await sitePos(page, offices[0].id), await sitePos(page, hub.id)]);
+    const link = (await state(page)).links[0];
+    const mid = await midpoint(page, link.id);
+    const before = await page.evaluate(() => JSON.stringify(window.miniNetwork.world.links[0].cells));
+    // Drag well off to the side of the link, into open map.
+    const off = await page.evaluate((id) => {
+      const g = window.miniNetwork;
+      const w = g.world;
+      const l = w.linkById.get(id);
+      const a = w.siteById.get(l.a);
+      const b = w.siteById.get(l.b);
+      // A point beside the middle of the link, perpendicular to it.
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      for (const side of [1, -1]) {
+        const x = mx + (side * -(b.y - a.y) * 90) / len;
+        const y = my + (side * (b.x - a.x) * 90) / len;
+        const near = w.sites.some((s) => Math.hypot(s.x - x, s.y - y) < 60);
+        if (!near) {
+          const p = g.worldToScreen(x, y);
+          const rect = document.getElementById("game").getBoundingClientRect();
+          return { x: rect.left + p.x, y: rect.top + p.y };
+        }
+      }
+      return null;
+    }, link.id);
+    assert(off, "found open map beside the link");
+    await mouseDrag(page, [mid, off]);
+    const after = await page.evaluate(() => ({ n: window.miniNetwork.world.links.length, cells: JSON.stringify(window.miniNetwork.world.links[0].cells) }));
+    assert(after.n === 1, "still one link");
+    assert(after.cells !== before, "its path changed");
+  }],
   ["drawing from the end of a line extends that line", async (t) => {
     const page = await t.open();
     const { hub, offices } = await setup(page);
