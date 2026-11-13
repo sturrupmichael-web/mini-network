@@ -244,6 +244,31 @@ export const CONFIG = {
     radius: 260,
   },
 
+  hunger: {
+    /**
+     * A district hub (hungry in sites.js) wants deliveries. Once it has
+     * been on the map for startDelay seconds and a site that could feed it
+     * has settled in nearby (within 1.2 × districts.radius), it gains a hunger pip every secondsPerPip seconds, and
+     * each packet delivered there takes one away. With maxPips pips its
+     * overload ring fills, just like a site whose queue is too long.
+     */
+    startDelay: 30,
+    secondsPerPip: 10,
+    maxPips: 5,
+  },
+
+  siteGrowth: {
+    /**
+     * A site that can grow (grows in sites.js) grows once this many of its
+     * packets have been delivered: it's drawn bigger, sends traffic more
+     * often, and queues more before it overloads.
+     */
+    deliveries: 60,
+    size: 1.3,
+    intervalScale: 0.7,
+    capacity: 4,
+  },
+
   overload: {
     /**
      * When a site's queue holds more packets than its capacity, its ring

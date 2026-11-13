@@ -236,6 +236,12 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
           const p = worldToScreen(camera, site.x, site.y);
           ui.pops.push({ x: p.x, y: p.y, born: now, color: world.data.traffic[e.traffic].color });
         }
+      } else if (e.type === "site-grew") {
+        const site = world.siteById.get(e.siteId);
+        if (site) {
+          const p = worldToScreen(camera, site.x, site.y);
+          for (let i = 0; i < 3; i++) ui.pops.push({ x: p.x, y: p.y, born: now + i * 0.15, color: world.data.sites[site.type].color });
+        }
       } else if (e.type === "event") audio.cue("event");
       else if (e.type === "dropped") audio.cue("drop");
       else if (e.type === "outage") audio.cue("outage");

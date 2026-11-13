@@ -107,7 +107,10 @@ export const tests = [
     await page.evaluate(() => {
       const g = window.miniNetwork;
       g.loop.paused = true;
+      // Nothing is connected, so keep it from ending: huge queues, and no
+      // outages (hungry district hubs would otherwise starve).
       g.world.bonus.capacity = 1000;
+      g.world.outages = false;
       for (let day = 0; day < 20; day++) {
         g.runTicks(60 * 30);
         if (g.world.pendingReward) {

@@ -114,6 +114,8 @@ Every field is commented in the file. The ones that matter most:
 | `qos.priorityCost`, `qos.otherCost` | How much faster calls and payments get through a switch with a QoS policy, and how much slower everything else gets |
 | `districts.chance`, `districts.radius` | How often new warehouses and shops appear near their district hub, and how near |
 | `backbone.speed` | How many times faster packets move along a backbone |
+| `hunger.*` | How patient district hubs are before they need deliveries |
+| `siteGrowth.*` | How many deliveries make a site grow, and how much bigger and busier it gets |
 | `rewards.weekly` | What arrives at the end of every week before you pick a reward |
 | `spawn.packetIntervalScale` | Global traffic rate: lower is busier |
 | `spawn.warmupDays`, `spawn.warmupScale` | The calm start: traffic begins this many times sparser and eases to normal over these days |

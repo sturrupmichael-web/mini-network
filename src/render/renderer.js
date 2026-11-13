@@ -15,7 +15,8 @@ export function uiScale(camera) {
 
 export function siteRadiusPx(world, site, camera) {
   const def = world.data.sites[site.type];
-  return THEME.sizes.siteRadius * def.size * uiScale(camera);
+  const grown = site.grown ? world.config.siteGrowth.size : 1;
+  return THEME.sizes.siteRadius * def.size * grown * uiScale(camera);
 }
 
 /** Screen position of the "remove" button for a selected link. */
@@ -766,6 +767,15 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
     ctx.textBaseline = "middle";
     ctx.fillText(site.label, x, y + (def.shape === "district" ? r * 0.12 : 0.5));
   }
+  if (site.grown) {
+    // A grown site gets a second, thin ring in its own colour.
+    ctx.strokeStyle = def.color;
+    ctx.lineWidth = 1.6 * k;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.45, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (def.hungry) drawHunger(ctx, world, colors, site, x, y, r, k);
   if (site.qos) {
     // A QoS policy: a little badge with a "fast lane" chevron, top right.
     const s = site.core ? r * 1.2 : r;
@@ -784,6 +794,28 @@ function drawSite(ctx, world, camera, colors, site, ui, k) {
     ctx.lineTo(bx - 1.8 * k, by + 2.4 * k);
     ctx.stroke();
     ctx.lineCap = "butt";
+  }
+}
+
+/** Hunger pips: a row of dots above a district hub, filling as it waits for deliveries. */
+function drawHunger(ctx, world, colors, site, x, y, r, k) {
+  const max = world.config.hunger.maxPips;
+  const full = Math.floor(site.hunger);
+  if (full === 0 && site.hunger < 0.5) return;
+  const gap = 9 * k;
+  const startX = x - ((max - 1) * gap) / 2;
+  const py = y - r * 1.55;
+  for (let i = 0; i < max; i++) {
+    ctx.beginPath();
+    ctx.arc(startX + i * gap, py, 3.2 * k, 0, Math.PI * 2);
+    if (i < full) {
+      ctx.fillStyle = full >= max ? colors.overload : world.data.sites[site.type].color;
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = world.data.sites[site.type].color;
+      ctx.lineWidth = 1.2 * k;
+      ctx.stroke();
+    }
   }
 }
 

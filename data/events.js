@@ -71,7 +71,7 @@ export const EVENTS = [
     id: "logistics-hub",
     name: "Logistics hub",
     toasts: [
-      "The warehouses got their own ERP hub. Warehouses nearby can send to it instead of HQ.",
+      "The warehouses got their own ERP hub. Connect nearby warehouses to it and keep it fed.",
       "Operations opened a logistics hub. New warehouses will set up around it.",
     ],
     effect: "district",
@@ -84,7 +84,7 @@ export const EVENTS = [
     id: "payment-gateway",
     name: "Payment gateway",
     toasts: [
-      "Finance stood up a payment gateway. Shops can pay through it instead of HQ.",
+      "Finance stood up a payment gateway. Connect nearby shops to it and keep it fed.",
       "A payment gateway went live. New shops will open around it.",
     ],
     effect: "district",

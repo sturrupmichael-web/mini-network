@@ -29,11 +29,12 @@ export function warmupFactor(world) {
 }
 
 /** Seconds until a site's next packet, scaled by the calm start, traffic growth and time of day. */
-export function randomInterval(world, def) {
+export function randomInterval(world, def, site = null) {
   const [min, max] = def.packetInterval;
   const activity = isNight(world) ? def.activity.night : def.activity.day;
   const scale = world.config.spawn.packetIntervalScale * world.trafficScale * warmupFactor(world);
-  return (world.rng.range(min, max) * scale) / Math.max(activity, 0.01);
+  const grown = site?.grown ? world.config.siteGrowth.intervalScale : 1;
+  return (world.rng.range(min, max) * scale * grown) / Math.max(activity, 0.01);
 }
 
 export function addSite(world, type, x, y, label = null) {
@@ -61,6 +62,12 @@ export function addSite(world, type, x, y, label = null) {
     busyUntil: 0,
     /** Switches only, for drawing: 0–1, how jammed it has been lately. */
     jam: 0,
+    /** Hungry district hubs only: hunger pips (0 to config.hunger.maxPips). */
+    hunger: 0,
+    /** Packets this site sent that were delivered (for growing). */
+    served: 0,
+    /** Has grown into a bigger, busier site (config.siteGrowth). */
+    grown: false,
     nextSpawn: def.packetInterval
       ? world.time + (world.tick > 0 ? (world.config.spawn.newSiteGrace ?? 0) : world.config.spawn.graceSeconds) + randomInterval(world, def)
       : Infinity,
@@ -101,7 +108,48 @@ export function switchTime(world, site, packet) {
 
 /** Packets a site can queue before it starts to overload. */
 export function siteCapacity(world, site) {
-  return world.data.sites[site.type].capacity + world.bonus.capacity;
+  const grown = site.grown ? world.config.siteGrowth.capacity : 0;
+  return world.data.sites[site.type].capacity + world.bonus.capacity + grown;
+}
+
+/** Is this hungry hub out of patience (all its pips full)? */
+export function isStarving(world, site) {
+  return site.hunger >= world.config.hunger.maxPips;
+}
+
+/**
+ * Every tick: hungry district hubs get hungrier while nothing that could
+ * feed them is being delivered.
+ */
+export function updateHunger(world) {
+  const h = world.config.hunger;
+  for (const site of world.sites) {
+    if (!world.data.sites[site.type].hungry) continue;
+    if (world.time - site.born < h.startDelay) continue;
+    // Only once its district has formed: a site that sends it traffic has
+    // settled in nearby (so there's something sensible to connect).
+    const reach = world.config.districts.radius * 1.2;
+    const settle = world.config.spawn.newSiteGrace ?? 0;
+    const fed = world.sites.some(
+      (s) =>
+        world.data.sites[s.type].district === site.type &&
+        world.time - s.born >= settle &&
+        Math.hypot(s.x - site.x, s.y - site.y) <= reach,
+    );
+    if (!fed) continue;
+    site.hunger = Math.min(h.maxPips, site.hunger + world.dt / h.secondsPerPip);
+  }
+}
+
+/** A packet from `origin` was delivered at `dest`: feed the hub, grow the sender. */
+export function recordDelivery(world, origin, dest) {
+  if (world.data.sites[dest.type].hungry) dest.hunger = Math.max(0, dest.hunger - 1);
+  if (!origin || origin.grown || !world.data.sites[origin.type].grows) return;
+  origin.served++;
+  if (origin.served >= world.config.siteGrowth.deliveries) {
+    origin.grown = true;
+    world.events.push({ type: "site-grew", siteId: origin.id });
+  }
 }
 
 /**
