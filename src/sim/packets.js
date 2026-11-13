@@ -4,7 +4,7 @@
  */
 import { linkBandwidth, linkSpeed } from "./links.js";
 import { nextHop } from "./routing.js";
-import { currentDay, destinationExists, destKeyForTraffic, isNight, randomInterval, siteMatches, switchTime } from "./sites.js";
+import { currentDay, destinationExists, destKeyForTraffic, isNight, randomInterval, recordDelivery, siteMatches, switchTime } from "./sites.js";
 
 /** Create one packet waiting at `site`, heading for destination `to`. */
 export function createPacket(world, site, trafficId, to) {
@@ -64,7 +64,7 @@ export function spawnPackets(world) {
   for (const site of world.sites) {
     if (world.time < site.nextSpawn) continue;
     const def = world.data.sites[site.type];
-    site.nextSpawn = world.time + randomInterval(world, def);
+    site.nextSpawn = world.time + randomInterval(world, def, site);
     const weights = availableTraffic(world, site);
     if (Object.keys(weights).length === 0) continue;
     let count = 1;
@@ -171,6 +171,7 @@ export function movePackets(world) {
     if (siteMatches(site, packet.to)) {
       if (traffic.junk) continue; // an attack that got through scores nothing
       world.stats.delivered++;
+      recordDelivery(world, world.siteById.get(packet.origin), site);
       world.stats.score += traffic.points;
       world.events.push({ type: "delivered", packetId: packet.id, siteId: site.id, traffic: packet.traffic });
       continue;

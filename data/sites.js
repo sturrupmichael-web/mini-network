@@ -28,6 +28,13 @@
  *   district        Optional: a destination site type this kind of site
  *                   clusters around. Once one is on the map, most new sites
  *                   of this kind appear near it (config.districts).
+ *   hungry          Optional, for district hubs: true if the hub wants
+ *                   deliveries. Left unserved it builds up hunger pips,
+ *                   and a full set of pips fills its overload ring
+ *                   (config.hunger).
+ *   grows           Optional, for sites that send traffic: true if it can
+ *                   grow into a bigger, busier site once enough of its
+ *                   packets have been delivered (config.siteGrowth).
  *   label           Optional short text drawn on "hub" and "district" sites
  *                   that arrive during play.
  */
@@ -55,6 +62,7 @@ export const SITE_TYPES = {
     activity: { day: 1.2, night: 0.45 },
     burst: null,
     unlockDay: 0,
+    grows: true,
   },
   warehouse: {
     name: "Warehouse",
@@ -68,6 +76,7 @@ export const SITE_TYPES = {
     burst: { chance: 0.18, min: 3, max: 5 },
     unlockDay: 2,
     district: "logistics",
+    grows: true,
   },
   retail: {
     name: "Retail branch",
@@ -81,6 +90,7 @@ export const SITE_TYPES = {
     burst: null,
     unlockDay: 4,
     district: "payhub",
+    grows: true,
   },
   logistics: {
     name: "Logistics hub",
@@ -94,6 +104,7 @@ export const SITE_TYPES = {
     burst: null,
     unlockDay: 0,
     label: "ERP",
+    hungry: true,
   },
   payhub: {
     name: "Payment gateway",
@@ -107,6 +118,7 @@ export const SITE_TYPES = {
     burst: null,
     unlockDay: 0,
     label: "PAY",
+    hungry: true,
   },
   cloud: {
     name: "Cloud region",

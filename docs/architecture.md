@@ -134,6 +134,16 @@ land between ticks.
   `backbone.speed` times faster (routing divides its length by that too).
   Switches can't split it, it can't be rerouted or upgraded, and removing
   it refunds the backbone. Drawn wider with a dashed centre line.
+- **Hunger**: `hungry` site types (the district hubs) gain a pip every
+  `hunger.secondsPerPip` once they're `hunger.startDelay` old and a settled
+  site of their district is within 1.2 × `districts.radius`
+  (`updateHunger`). Each delivery there removes one (`recordDelivery`). At
+  `hunger.maxPips` the hub counts as over capacity, so its overload ring
+  fills (`isStarving`). Drawn as a row of dots above the hub.
+- **Growing sites**: `grows` site types count delivered packets they sent
+  (`site.served`). At `siteGrowth.deliveries` they grow once: `site.grown`
+  scales their drawn size, packet interval and capacity, and a
+  `site-grew` event plays a triple pop.
 - **Hop limits**: traffic with `maxHops` (VoIP, payments) is dropped if it
   needs more hops: lost points plus `drops.overloadPenalty` on that site's ring.
 - **Day/night**: sites' `activity` multiplies their packet rate; traffic

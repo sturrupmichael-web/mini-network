@@ -14,7 +14,7 @@ import { initEvents, updateEvents } from "./events.js";
 import { dispatchQueues, movePackets, spawnPackets } from "./packets.js";
 import { initProgression, updateProgression } from "./progression.js";
 import { computeRoutes } from "./routing.js";
-import { addSite, siteCapacity } from "./sites.js";
+import { addSite, isStarving, siteCapacity, updateHunger } from "./sites.js";
 import { buildTerrain } from "./grid.js";
 import { updateView } from "./view.js";
 
@@ -102,6 +102,7 @@ export function step(world) {
   spawnPackets(world);
   dispatchQueues(world);
   movePackets(world);
+  updateHunger(world);
   updateOverload(world);
 }
 
@@ -112,7 +113,7 @@ function updateOverload(world) {
   while (world.dayStress.length <= world.day) world.dayStress.push(0);
   world.dayStress[world.day] = Math.min(1, Math.max(world.dayStress[world.day], worst));
   for (const site of world.sites) {
-    const over = site.queue.length > siteCapacity(world, site);
+    const over = site.queue.length > siteCapacity(world, site) || isStarving(world, site);
     const before = site.overload;
     site.overload = over ? site.overload + world.dt : Math.max(0, site.overload - world.dt * recoveryRate);
     if (before === 0 && site.overload > 0) world.events.push({ type: "overload-start", siteId: site.id });
@@ -154,7 +155,7 @@ export function snapshot(world) {
     stats: world.stats,
     dayStress: world.dayStress,
     inventory: world.inventory,
-    sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan, s.core, s.qos, s.busyUntil]),
+    sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan, s.core, s.qos, s.busyUntil, s.hunger, s.served, s.grown]),
     links: world.links.map((l) => [l.id, l.a, l.b, l.busyUntil, l.inTransit, l.tier, l.firewall, l.leased, l.down, l.backbone, l.length]),
     packets: world.packets.map((p) => [p.id, p.traffic, p.to, p.at, p.linkId, p.dir, p.progress, p.hops]),
   });
