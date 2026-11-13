@@ -69,6 +69,12 @@ export const ITEMS = {
     tip: "Drop on a switch. It sends VoIP calls and card payments first and twice as fast, so they make their hop limits, but everything else waits longer there.",
     target: "site",
   },
+  backbone: {
+    name: "Backbone",
+    hint: "Drop on a link to turn it into a straight, very fast backbone.",
+    tip: "Drop on a link. It straightens out over water, parks, hills and carrier boundaries, carries as much as dark fiber, and packets fly along it. Its squares and leased lines come back. Nothing can join it in the middle.",
+    target: "link",
+  },
   leased: {
     name: "Leased lines",
     hint: "Used up when a link crosses a carrier boundary.",

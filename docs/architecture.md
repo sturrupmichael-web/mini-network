@@ -86,6 +86,7 @@ land between ticks.
 | ...an SD-WAN box onto a site | `addSdwan` |
 | ...a core router onto a switch | `addCoreRouter` |
 | ...a QoS policy onto a switch | `addQos` |
+| ...a backbone onto a link | `makeBackbone` |
 | ...a switch onto empty map / onto a link | `placeSwitch` / `placeSwitchOnLink` |
 | Tap a switch, then its × (or right-click it) | `removeSwitch` |
 | Pick a weekly reward | `chooseReward` |
@@ -126,6 +127,13 @@ land between ticks.
   `district` (warehouse, retail) appear within `districts.radius` of one of
   their hubs `districts.chance` of the time (`findSiteSpot(world, type)`;
   new sites now pick their type before their spot).
+- **Backbones** (`makeBackbone`, the `backbone` item): a link becomes a
+  straight two-point path over terrain and boundaries; its squares and
+  leased lines are refunded (`cost` and `leased` go to 0), it runs at the
+  top tier's bandwidth, and `linkSpeed` makes packets on it move
+  `backbone.speed` times faster (routing divides its length by that too).
+  Switches can't split it, it can't be rerouted or upgraded, and removing
+  it refunds the backbone. Drawn wider with a dashed centre line.
 - **Hop limits**: traffic with `maxHops` (VoIP, payments) is dropped if it
   needs more hops: lost points plus `drops.overloadPenalty` on that site's ring.
 - **Day/night**: sites' `activity` multiplies their packet rate; traffic

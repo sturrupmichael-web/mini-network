@@ -21,6 +21,7 @@ import {
   addLink,
   addSdwan,
   createWorld,
+  makeBackbone,
   isHalted,
   placeSwitch,
   placeSwitchOnLink,
@@ -62,6 +63,10 @@ const REFUSED_TEXT = {
   "not-a-switch": "That goes on a switch.",
   "has-router": "That switch is already a core router.",
   "no-qos": "No QoS policies left.",
+  "no-backbone": "No backbones left.",
+  "has-backbone": "That link is already a backbone.",
+  backbone: "Backbones only connect at their two ends.",
+  "backbone-max": "A backbone is already as fast as it gets.",
   "has-qos": "That switch already has a QoS policy.",
 };
 
@@ -430,6 +435,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     if (item === "sdwan" && target.kind === "site") return addSdwan(world, target.id);
     if (item === "routers" && target.kind === "site") return addCoreRouter(world, target.id);
     if (item === "qos" && target.kind === "site") return addQos(world, target.id);
+    if (item === "backbone" && target.kind === "link") return makeBackbone(world, target.id);
     if (item === "switches" && target.kind === "link") return placeSwitchOnLink(world, target.id, target.x, target.y);
     if (item === "switches" && target.kind === "spot") return placeSwitch(world, target.x, target.y);
     return { ok: false, reason: "bad-target" };

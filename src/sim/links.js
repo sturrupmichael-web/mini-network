@@ -46,7 +46,13 @@ export function plannedLink(world, a, b) {
 }
 
 export function linkBandwidth(world, link) {
-  return world.config.links.bandwidth * world.data.tiers[link.tier].bandwidth;
+  const tiers = world.data.tiers;
+  return world.config.links.bandwidth * (link.backbone ? tiers.at(-1) : tiers[link.tier]).bandwidth;
+}
+
+/** How many times faster than normal packets move along this link. */
+export function linkSpeed(world, link) {
+  return link.backbone ? world.config.backbone.speed : 1;
 }
 
 /** True when a link touches an internet edge but has no firewall (after the rules arrive). */
@@ -96,6 +102,8 @@ export function addLink(world, aId, bId, line = 0, cells = null) {
     /** Index into LINK_TIERS. */
     tier: 0,
     firewall: false,
+    /** Turned into a straight, fast backbone (see makeBackbone). */
+    backbone: false,
     /** Leased lines used to cross carrier boundaries (refunded on removal). */
     leased,
     /** Cut by an event: { since, until } or null. */
@@ -147,6 +155,7 @@ export function removeLink(world, linkId) {
   world.inventory.upgrades += link.tier;
   world.inventory.firewalls += link.firewall ? 1 : 0;
   world.inventory.leased += link.leased;
+  world.inventory.backbone += link.backbone ? 1 : 0;
   world.routing.dirty = true;
   world.events.push({ type: "link-removed", linkId });
   return { ok: true, link };
@@ -164,6 +173,7 @@ export function rerouteLink(world, linkId, viaId) {
   const via = world.siteById.get(viaId);
   if (!via) return { ok: false, reason: "unknown-site" };
   if (viaId === link.a || viaId === link.b) return { ok: false, reason: "same-site" };
+  if (link.backbone) return { ok: false, reason: "backbone" };
   const { a, b, line } = link;
   const legs = [];
   for (const [x, y] of [
@@ -184,11 +194,46 @@ export function rerouteLink(world, linkId, viaId) {
   return { ok: true };
 }
 
+/**
+ * Player action: turn a link into a backbone. It becomes a straight line
+ * between its two sites (over terrain and boundaries), its squares and
+ * leased lines go back to the inventory, and it runs at the top tier's
+ * bandwidth and config.backbone.speed. Removing it refunds the backbone.
+ */
+export function makeBackbone(world, linkId) {
+  if (world.over) return { ok: false, reason: "over" };
+  const link = world.linkById.get(linkId);
+  if (!link) return { ok: false, reason: "unknown-link" };
+  if (link.backbone) return { ok: false, reason: "has-backbone" };
+  if (world.inventory.backbone <= 0) return { ok: false, reason: "no-backbone" };
+  const a = world.siteById.get(link.a);
+  const b = world.siteById.get(link.b);
+  // Packets on it keep their place as a fraction of the way along.
+  const oldLength = link.length;
+  link.backbone = true;
+  link.path = [
+    { x: a.x, y: a.y },
+    { x: b.x, y: b.y },
+  ];
+  link.length = pathLength(link.path);
+  for (const p of world.packets) if (p.linkId === linkId) p.progress = (p.progress / oldLength) * link.length;
+  world.inventory.links += link.cost;
+  world.inventory.leased += link.leased;
+  link.cost = 0;
+  link.leased = 0;
+  link.cells = [link.cells[0], link.cells.at(-1)];
+  world.inventory.backbone--;
+  world.routing.dirty = true;
+  world.events.push({ type: "backbone-added", linkId });
+  return { ok: true };
+}
+
 /** Player action: move a link up one bandwidth tier. */
 export function upgradeLink(world, linkId) {
   if (world.over) return { ok: false, reason: "over" };
   const link = world.linkById.get(linkId);
   if (!link) return { ok: false, reason: "unknown-link" };
+  if (link.backbone) return { ok: false, reason: "backbone-max" };
   if (link.tier >= world.data.tiers.length - 1) return { ok: false, reason: "max-tier" };
   if (world.inventory.upgrades <= 0) return { ok: false, reason: "no-upgrades" };
   link.tier++;

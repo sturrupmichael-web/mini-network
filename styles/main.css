@@ -125,6 +125,8 @@ body {
   bottom: max(14px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
   padding: 6px 8px;
   border-radius: 26px;
@@ -246,6 +248,13 @@ body {
   border-top: 2px solid #fff;
   border-right: 2px solid #fff;
   transform: rotate(45deg);
+}
+
+.tray-icon-backbone {
+  width: 24px;
+  height: 9px;
+  border-radius: 4.5px;
+  background: repeating-linear-gradient(90deg, #fff 0 4px, transparent 4px 7px) 3px 50% / calc(100% - 6px) 1.6px no-repeat, #e8483f;
 }
 
 .tray-icon-capacity {
@@ -949,5 +958,17 @@ body {
   .hud-btn svg {
     width: 16px;
     height: 16px;
+  }
+  /* With every tool unlocked the tray wraps onto a second row. */
+  .hud-tray {
+    gap: 2px;
+    padding: 5px 6px;
+    width: max-content;
+  }
+  .tray-item {
+    gap: 5px;
+    min-height: 38px;
+    padding: 0 8px;
+    font-size: 14px;
   }
 }
