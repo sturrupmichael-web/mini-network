@@ -57,6 +57,18 @@ export const ITEMS = {
     tip: "Drop on a site. When a link is cut, that site finds another way instantly instead of waiting for the network to catch up.",
     target: "site",
   },
+  routers: {
+    name: "Core router",
+    hint: "Drop on a switch so it never jams.",
+    tip: "Drop on a switch to make it a core router. Switches forward one packet at a time and slow down as more links meet there; a core router forwards several times faster, however many links it has.",
+    target: "site",
+  },
+  qos: {
+    name: "QoS policy",
+    hint: "Drop on a switch so calls and payments go first.",
+    tip: "Drop on a switch. It sends VoIP calls and card payments first and twice as fast, so they make their hop limits, but everything else waits longer there.",
+    target: "site",
+  },
   leased: {
     name: "Leased lines",
     hint: "Used up when a link crosses a carrier boundary.",

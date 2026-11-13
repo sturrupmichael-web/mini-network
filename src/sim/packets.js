@@ -4,7 +4,7 @@
  */
 import { linkBandwidth } from "./links.js";
 import { nextHop } from "./routing.js";
-import { currentDay, destinationExists, destKeyForTraffic, isNight, randomInterval, siteMatches } from "./sites.js";
+import { currentDay, destinationExists, destKeyForTraffic, isNight, randomInterval, siteMatches, switchTime } from "./sites.js";
 
 /** Create one packet waiting at `site`, heading for destination `to`. */
 export function createPacket(world, site, trafficId, to) {
@@ -82,15 +82,29 @@ function removePackets(world, ids) {
   world.packets = world.packets.filter((p) => !ids.has(p.id));
 }
 
+/** How fast a switch's jam glow builds while packets wait at it, and fades after (per second). */
+const JAM_RISE = 1.5;
+const JAM_FADE = 0.6;
+
+function priorityFirst(world, queue, packetById) {
+  const isPriority = (id) => world.data.traffic[packetById.get(id).traffic].priority === true;
+  return [...queue.filter(isPriority), ...queue.filter((id) => !isPriority(id))];
+}
+
 export function dispatchQueues(world) {
   const packetById = new Map();
   for (const p of world.packets) packetById.set(p.id, p);
   const gone = new Set();
 
   for (const site of world.sites) {
+    const junction = world.data.sites[site.type].junction;
+    if (junction) site.jam = Math.max(0, site.jam - world.dt * JAM_FADE);
     if (site.queue.length === 0) continue;
+    let held = false;
     const remaining = [];
-    for (const packetId of site.queue) {
+    // A QoS policy looks at priority traffic first (keeping the order within each group).
+    const order = site.qos ? priorityFirst(world, site.queue, packetById) : site.queue;
+    for (const packetId of order) {
       const packet = packetById.get(packetId);
       const traffic = world.data.traffic[packet.traffic];
       const link = nextHop(world, site, packet.to, packet.from);
@@ -105,6 +119,13 @@ export function dispatchQueues(world) {
         remaining.push(packetId);
         continue;
       }
+      if (junction && world.time < site.busyUntil) {
+        // The switch is still forwarding the last packet: wait your turn.
+        held = true;
+        remaining.push(packetId);
+        continue;
+      }
+      if (junction) site.busyUntil = world.time + switchTime(world, site, packet);
       link.busyUntil[dir] = world.time + packet.size / linkBandwidth(world, link);
       if (traffic.junk && link.firewall) {
         // The firewall eats it, but checking it still costs bandwidth.
@@ -121,6 +142,7 @@ export function dispatchQueues(world) {
       packet.progress = 0;
     }
     site.queue = remaining;
+    if (held) site.jam = Math.min(1, site.jam + world.dt * (JAM_FADE + JAM_RISE));
   }
   removePackets(world, gone);
 }

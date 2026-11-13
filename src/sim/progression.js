@@ -54,16 +54,20 @@ export function updateProgression(world) {
     const s = world.config.spawn;
     world.trafficScale = Math.max(s.minIntervalScale, world.trafficScale * s.weeklyIntervalMultiplier);
     world.pendingReward = offerRewards(world);
+    grant(world, world.pendingReward.delivered);
     world.events.push({ type: "week", week: world.week });
   }
 
   if (world.time >= world.growth.nextSiteAt) {
     const g = world.config.growth;
     const types = Object.fromEntries(Object.entries(g.types).filter(([t]) => world.data.sites[t].unlockDay <= day));
-    const pos = findSiteSpot(world);
-    if (pos && Object.keys(types).length > 0) {
-      const site = addSite(world, world.rng.weighted(types), pos.x, pos.y);
-      world.events.push({ type: "site-added", siteId: site.id });
+    if (Object.keys(types).length > 0) {
+      const type = world.rng.weighted(types);
+      const pos = findSiteSpot(world, type);
+      if (pos) {
+        const site = addSite(world, type, pos.x, pos.y);
+        world.events.push({ type: "site-added", siteId: site.id });
+      }
     }
     world.growth.interval = Math.max(g.minInterval, world.growth.interval * g.intervalDecay);
     world.growth.nextSiteAt = world.time + world.growth.interval;
@@ -99,14 +103,29 @@ export function findSpot(world, { center, radius, anywhere = false }) {
   return null;
 }
 
-/** A spot for the next regular new site: near the data center, spreading out each day. */
-export function findSiteSpot(world) {
+/**
+ * A spot for the next regular new site: near the data center, spreading
+ * out each day. Sites with a district (sites.js) usually appear near one
+ * of their district hubs instead, once there is one.
+ */
+export function findSiteSpot(world, type = null) {
   const g = world.config.growth;
+  const district = type && world.data.sites[type]?.district;
+  const hubs = district ? world.sites.filter((s) => s.type === district) : [];
+  const d = world.config.districts;
+  if (hubs.length > 0 && d && world.rng.next() < d.chance) {
+    const hub = hubs[world.rng.int(0, hubs.length - 1)];
+    const near = findSpot(world, { center: hub, radius: d.radius });
+    if (near) return near;
+  }
   const hub = hubSite(world) ?? { x: world.map.width / 2, y: world.map.height / 2 };
   return findSpot(world, { center: hub, radius: g.startRadius + g.radiusGrowthPerDay * clock(world).day });
 }
 
-/** Pick two different rewards for the week that just ended. */
+/**
+ * The end-of-week offer: the weekly delivery (granted straight away by
+ * updateProgression) plus two different rewards to pick from.
+ */
 export function offerRewards(world) {
   const finishedWeek = world.week - 1;
   const pool = world.data.rewards.filter((r) => r.fromWeek <= finishedWeek);
@@ -117,7 +136,15 @@ export function offerRewards(world) {
     options.push(pool[index].id);
     pool.splice(index, 1);
   }
-  return { week: finishedWeek, options };
+  return { week: finishedWeek, options, delivered: { ...(world.config.rewards?.weekly ?? {}) } };
+}
+
+/** Add a reward's grant (or the weekly delivery) to the inventory. */
+function grant(world, items) {
+  for (const [key, amount] of Object.entries(items)) {
+    if (key === "capacity") world.bonus.capacity += amount;
+    else world.inventory[key] = (world.inventory[key] ?? 0) + amount;
+  }
 }
 
 /** Player action: take one of the offered rewards. */
@@ -126,10 +153,7 @@ export function chooseReward(world, rewardId) {
     return { ok: false, reason: "not-offered" };
   }
   const reward = world.data.rewards.find((r) => r.id === rewardId);
-  for (const [key, amount] of Object.entries(reward.grant)) {
-    if (key === "capacity") world.bonus.capacity += amount;
-    else world.inventory[key] = (world.inventory[key] ?? 0) + amount;
-  }
+  grant(world, reward.grant);
   world.pendingReward = null;
   world.events.push({ type: "reward", rewardId });
   return { ok: true };

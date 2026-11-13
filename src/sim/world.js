@@ -20,7 +20,7 @@ import { updateView } from "./view.js";
 
 export { addSite, siteCapacity } from "./sites.js";
 export { addFirewall, addLink, findLink, removeLink, rerouteLink, upgradeLink } from "./links.js";
-export { addSdwan, placeSwitch, placeSwitchOnLink, removeSwitch } from "./equipment.js";
+export { addCoreRouter, addQos, addSdwan, placeSwitch, placeSwitchOnLink, removeSwitch } from "./equipment.js";
 export { chooseReward } from "./progression.js";
 export { setEventSchedule, triggerEvent } from "./events.js";
 
@@ -60,7 +60,11 @@ export function createWorld({ config, data, map, seed, outages = true }) {
     cloudShare: 0,
     /** Set when the game ends: { siteId, time }. */
     over: null,
-    /** Set at the end of each week until the player picks: { week, options: [rewardId, rewardId] }. */
+    /**
+     * Set at the end of each week until the player picks:
+     * { week, options: [rewardId, rewardId], delivered: { links: 8 } }.
+     * `delivered` (config.rewards.weekly) is already in the inventory.
+     */
     pendingReward: null,
     routing: { tables: new Map(), dirty: true, nextRecompute: 0 },
     /** For each day, the closest any site came to an outage (0–1): the daily share grid. */
@@ -150,7 +154,7 @@ export function snapshot(world) {
     stats: world.stats,
     dayStress: world.dayStress,
     inventory: world.inventory,
-    sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan]),
+    sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan, s.core, s.qos, s.busyUntil]),
     links: world.links.map((l) => [l.id, l.a, l.b, l.busyUntil, l.inTransit, l.tier, l.firewall, l.leased, l.down]),
     packets: world.packets.map((p) => [p.id, p.traffic, p.to, p.at, p.linkId, p.dir, p.progress, p.hops]),
   });

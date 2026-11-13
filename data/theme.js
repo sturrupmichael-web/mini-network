@@ -44,6 +44,12 @@ export const THEME = {
     blocked: "#f2994a",
     firewall: "#f2994a",
     sdwan: "#13a8b5",
+    /** Fill for a switch upgraded to a core router. */
+    core: "#7b5cd6",
+    /** The badge on a switch with a QoS policy. */
+    qos: "#13a8b5",
+    /** The glow around a switch that packets are queueing at. */
+    jam: "rgba(242, 153, 74, 0.35)",
     leasedStripe: "#ffffff",
     dropTarget: "rgba(47, 128, 237, 0.25)",
   },
@@ -76,6 +82,9 @@ export const THEME = {
     blocked: "#f2a65a",
     firewall: "#f2a65a",
     sdwan: "#2cc4cf",
+    core: "#9479e6",
+    qos: "#2cc4cf",
+    jam: "rgba(242, 166, 90, 0.3)",
     leasedStripe: "#1d1e22",
     dropTarget: "rgba(86, 160, 255, 0.3)",
   },

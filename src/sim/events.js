@@ -8,7 +8,6 @@ import { findSpot } from "./progression.js";
 import { costToDestination } from "./routing.js";
 import { addSite, currentDay, hubSite } from "./sites.js";
 
-const NON_TARGETS = new Set(["datacenter", "cloud", "edge"]);
 
 /**
  * Effect handlers. start() returns false to skip (nothing to act on) or a
@@ -46,8 +45,8 @@ const EFFECTS = {
       // pile up at HQ through no fault of the player's.
       const targets = world.sites.filter(
         (s) =>
-          !NON_TARGETS.has(s.type) &&
-          !world.data.sites[s.type].junction &&
+          // Only sites that send traffic: not destinations, not switches.
+          world.data.sites[s.type].packetInterval !== null &&
           costToDestination(world, hub, `#${s.id}`) < Infinity,
       );
       if (targets.length === 0) return false;
@@ -119,6 +118,18 @@ const EFFECTS = {
       if (!spot) return false;
       const site = addSite(world, "cloud", spot.x, spot.y);
       world.cloudShare = ev.params.share;
+      world.events.push({ type: "site-added", siteId: site.id });
+      return { siteId: site.id };
+    },
+  },
+
+  district: {
+    start(world, ev) {
+      const type = ev.params.type;
+      if (world.sites.some((s) => s.type === type)) return false;
+      const spot = farSpot(world);
+      if (!spot) return false;
+      const site = addSite(world, type, spot.x, spot.y, world.data.sites[type].label ?? null);
       world.events.push({ type: "site-added", siteId: site.id });
       return { siteId: site.id };
     },

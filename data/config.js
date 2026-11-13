@@ -62,11 +62,35 @@ export const CONFIG = {
     firewalls: 0,
     sdwan: 0,
     leased: 1,
+    routers: 0,
+    qos: 0,
   },
 
   switches: {
     /** Closest a switch may be placed to any site or other switch (wu). */
     minSpacing: 55,
+    /**
+     * Switches have to take turns: a switch forwards at most forwardRate
+     * size-1 packets per second, across all its links together. Every link
+     * beyond the second slows it down by crowdPenalty (0.25 = a quarter),
+     * so a switch with lots of links meeting at it jams first. Packets that
+     * are waiting their turn queue at the switch, and routing steers around
+     * long queues.
+     */
+    forwardRate: 4,
+    crowdPenalty: 0.25,
+    /** A switch upgraded to a core router forwards this many per second, however many links it has. */
+    coreForwardRate: 14,
+  },
+
+  qos: {
+    /**
+     * A switch with a QoS policy sends priority traffic (VoIP, payments)
+     * first, and it takes this fraction of the usual switching time...
+     */
+    priorityCost: 0.5,
+    /** ...while everything else takes this much longer than usual (the catch). */
+    otherCost: 1.3,
   },
 
   failover: {
@@ -200,6 +224,16 @@ export const CONFIG = {
     types: { office: 5, warehouse: 2, retail: 2 },
   },
 
+  districts: {
+    /**
+     * Once a district hub (a logistics hub, a payment gateway) is on the
+     * map, a new site of the kind that clusters around it (see `district`
+     * in sites.js) appears within `radius` (wu) of it this often...
+     */
+    chance: 0.7,
+    radius: 260,
+  },
+
   overload: {
     /**
      * When a site's queue holds more packets than its capacity, its ring
@@ -219,6 +253,15 @@ export const CONFIG = {
      * is filling.
      */
     warnAt: 0.7,
+  },
+
+  rewards: {
+    /**
+     * Delivered at the end of every week before you pick a reward, so the
+     * pick is always about what kind of help you want, never about links
+     * vs. nothing. Keys are inventory items (like a reward's grant).
+     */
+    weekly: { links: 8 },
   },
 
   time: {

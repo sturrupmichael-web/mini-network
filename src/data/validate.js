@@ -3,7 +3,7 @@
  * something that exists. Returns a list of human-readable problems (empty
  * when all is well). Used by the tests, and at startup in the browser.
  */
-const SITE_SHAPES = ["hub", "circle", "square", "triangle", "cloud", "edge", "switch"];
+const SITE_SHAPES = ["hub", "circle", "square", "triangle", "cloud", "edge", "switch", "district"];
 const PACKET_SHAPES = ["circle", "square", "triangle", "diamond"];
 const HOURS = ["any", "day", "night"];
 const SCHEDULE_KEYS = ["day", "every", "weekday", "fromWeek"];
@@ -65,6 +65,10 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
       if (!Number.isInteger(v) || v <= 0) err(`${at}.grant.${k} must be a whole number > 0`);
     }
   }
+  for (const [k, v] of Object.entries(config?.rewards?.weekly ?? {})) {
+    if (!(rewardGrants ?? []).includes(k)) err(`config.rewards.weekly has unknown key "${k}"`);
+    if (!Number.isInteger(v) || v <= 0) err(`config.rewards.weekly.${k} must be a whole number > 0`);
+  }
   if ((rewards ?? []).filter((r) => r.fromWeek === 1).length < 2) err("at least two rewards must be available from week 1");
 
   // Traffic types.
@@ -83,6 +87,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     if (!Number.isInteger(t.unlockDay) || t.unlockDay < 0) err(`${at}.unlockDay must be a whole number ≥ 0`);
     if (!HOURS.includes(t.hours)) err(`${at}.hours must be one of ${HOURS.join(", ")}`);
     if (t.maxHops !== undefined && (!Number.isInteger(t.maxHops) || t.maxHops < 1)) err(`${at}.maxHops must be a whole number ≥ 1`);
+    if (t.priority !== undefined && typeof t.priority !== "boolean") err(`${at}.priority must be true or false`);
     if (t.dropPoints !== undefined && !isNum(t.dropPoints)) err(`${at}.dropPoints must be a number`);
   }
 
@@ -119,6 +124,9 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
       }
     }
     if (!Number.isInteger(s.unlockDay) || s.unlockDay < 0) err(`${at}.unlockDay must be a whole number ≥ 0`);
+    if (s.district !== undefined && (!sites[s.district] || sites[s.district].packetInterval !== null)) {
+      err(`${at}.district must be a destination site type (one that creates no packets)`);
+    }
   }
   if (!Object.values(sites ?? {}).some((s) => s.shape === "hub")) err("sites needs a hub-shaped site type (the data center)");
   if (!Object.values(sites ?? {}).some((s) => s.junction)) err("sites needs a junction site type (the switch)");
