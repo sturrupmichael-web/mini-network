@@ -64,6 +64,7 @@ export const CONFIG = {
     leased: 1,
     routers: 0,
     qos: 0,
+    backbone: 0,
   },
 
   switches: {
@@ -81,6 +82,15 @@ export const CONFIG = {
     crowdPenalty: 0.25,
     /** A switch upgraded to a core router forwards this many per second, however many links it has. */
     coreForwardRate: 14,
+  },
+
+  backbone: {
+    /**
+     * A backbone link runs straight between its two ends, over terrain and
+     * carrier boundaries, at the top tier's bandwidth, and packets move
+     * along it this many times faster. Nothing can join it in the middle.
+     */
+    speed: 2.5,
   },
 
   qos: {
@@ -122,7 +132,7 @@ export const CONFIG = {
     /**
      * Packets take the cheapest path to their destination. The cost of a
      * path is the sum of, for each hop:
-     *     link length (wu)
+     *     link length (wu), divided by its speed (backbones are faster)
      *   + hopCost
      *   + congestionWeight × packets currently travelling on that link
      *   + queueWeight × packets waiting at the site the hop arrives at

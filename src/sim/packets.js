@@ -2,7 +2,7 @@
  * Packets: creating them at sites, sending them down links, moving them,
  * delivering or dropping them.
  */
-import { linkBandwidth } from "./links.js";
+import { linkBandwidth, linkSpeed } from "./links.js";
 import { nextHop } from "./routing.js";
 import { currentDay, destinationExists, destKeyForTraffic, isNight, randomInterval, siteMatches, switchTime } from "./sites.js";
 
@@ -156,7 +156,7 @@ export function movePackets(world) {
       continue;
     }
     const link = world.linkById.get(packet.linkId);
-    packet.progress += speed;
+    packet.progress += speed * linkSpeed(world, link);
     if (packet.progress < link.length) {
       survivors.push(packet);
       continue;

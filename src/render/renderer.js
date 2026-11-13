@@ -347,7 +347,8 @@ function partialPath(points, length) {
 }
 
 function linkWidth(world, link, k) {
-  return THEME.sizes.linkWidth * world.data.tiers[link.tier].width * k;
+  const tiers = world.data.tiers;
+  return THEME.sizes.linkWidth * (link.backbone ? tiers.at(-1).width * 1.15 : tiers[link.tier].width) * k;
 }
 
 function drawLinks(ctx, world, camera, colors, k, ui, now) {
@@ -375,7 +376,14 @@ function drawLinks(ctx, world, camera, colors, k, ui, now) {
     if (link.down || blocked) ctx.setLineDash([width * 1.4, width * 1.2]);
     strokePath(ctx, pts);
     ctx.setLineDash([]);
-    if (link.leased) {
+    if (link.backbone) {
+      // Backbones look like an express road: a dashed centre line.
+      ctx.strokeStyle = colors.leasedStripe;
+      ctx.lineWidth = Math.max(1.4, width * 0.16);
+      ctx.setLineDash([width * 0.9, width * 0.7]);
+      strokePath(ctx, pts);
+      ctx.setLineDash([]);
+    } else if (link.leased) {
       // Leased lines get a double-rail look.
       ctx.strokeStyle = colors.leasedStripe;
       ctx.lineWidth = Math.max(1.2, width * 0.28);

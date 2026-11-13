@@ -313,11 +313,12 @@ export function createHud(root, opts) {
           shown.inv[id] = n;
           counts[id].textContent = String(n);
           b.classList.toggle("empty", n === 0);
-          // Firewalls only show up once they matter, and core routers and QoS
-          // policies once you have one; everything else always shows.
+          // Firewalls only show up once they matter, and core routers, QoS
+          // policies and backbones once you have one; everything else always shows.
           b.hidden =
             (id === "firewalls" && n === 0 && !world.security) || (id === "routers" && n === 0 && !world.sites.some((s) => s.core)) ||
-            (id === "qos" && n === 0 && !world.sites.some((s) => s.qos));
+            (id === "qos" && n === 0 && !world.sites.some((s) => s.qos)) ||
+            (id === "backbone" && n === 0 && !world.links.some((l) => l.backbone));
           if (items[id].target) b.disabled = n === 0;
         }
       }

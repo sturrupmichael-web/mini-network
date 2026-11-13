@@ -41,6 +41,14 @@ export const REWARDS = [
     grant: { qos: 1, upgrades: 1 },
   },
   {
+    id: "backbone",
+    label: "Backbone",
+    detail: "Turn one link into a straight, very fast express line.",
+    weight: 2,
+    fromWeek: 3,
+    grant: { backbone: 1 },
+  },
+  {
     id: "switch-router",
     label: "Switch + core router",
     detail: "Build a new hub that can take a lot of links.",
@@ -87,4 +95,4 @@ export const REWARDS = [
 ];
 
 /** The grant keys the engine understands (checked by the validator). */
-export const REWARD_GRANTS = ["links", "upgrades", "switches", "firewalls", "sdwan", "leased", "routers", "qos", "capacity"];
+export const REWARD_GRANTS = ["links", "upgrades", "switches", "firewalls", "sdwan", "leased", "routers", "qos", "backbone", "capacity"];

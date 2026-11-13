@@ -50,6 +50,7 @@ export function placeSwitchOnLink(world, linkId, x, y) {
   if (world.over) return { ok: false, reason: "over" };
   const link = world.linkById.get(linkId);
   if (!link) return { ok: false, reason: "unknown-link" };
+  if (link.backbone) return { ok: false, reason: "backbone" };
   if (world.inventory.switches <= 0) return { ok: false, reason: "no-switches" };
   // The interior cell nearest the drop point.
   let index = -1;
