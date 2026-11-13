@@ -3,6 +3,8 @@
  * inventory tray, the weekly reward picker and the game-over card.
  * Only reads the world and calls the actions it is given.
  */
+import { isStarving } from "../sim/sites.js";
+import { playTimelapse, saveImage } from "./timelapse.js";
 import { clock } from "../sim/progression.js";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -118,6 +120,10 @@ export function createHud(root, opts) {
           <div><dt>Survived</dt><dd data-hud="over-days">0 days</dd></div>
         </dl>
         <p class="card-best" data-hud="over-best"></p>
+        <div class="timelapse" data-hud="timelapse-box" hidden>
+          <canvas class="timelapse-canvas" data-hud="timelapse" role="img" aria-label="Your network growing, day by day"></canvas>
+          <button type="button" class="link-btn" data-hud="save-image">Save image</button>
+        </div>
         <div class="share" data-hud="share" hidden>
           <pre class="share-text" data-hud="share-text"></pre>
           <button type="button" class="secondary-btn" data-hud="share-btn">Copy result</button>
@@ -158,6 +164,9 @@ export function createHud(root, opts) {
     run: q("run"),
     overBest: q("over-best"),
     overSeed: q("over-seed"),
+    timelapseBox: q("timelapse-box"),
+    timelapse: q("timelapse"),
+    saveImage: q("save-image"),
     overMenu: q("over-menu"),
     sameSeed: q("same-seed"),
     coach: q("coach"),
@@ -264,6 +273,7 @@ export function createHud(root, opts) {
 
   let toastTimer = 0;
   let tickerTimer = 0;
+  let stopTimelapse = () => {};
   const shown = {
     score: -1,
     paused: null,
@@ -381,11 +391,20 @@ export function createHud(root, opts) {
       if (shown.over !== world.over) {
         shown.over = world.over;
         el.over.hidden = !world.over;
+        stopTimelapse();
         if (world.over) {
+          const frames = world.history;
+          el.timelapseBox.hidden = frames.length === 0;
+          if (frames.length > 0) {
+            stopTimelapse = playTimelapse(el.timelapse, frames, world.data.sites);
+            el.saveImage.onclick = () => saveImage(el.timelapse, frames, world.data.sites);
+          }
           const site = world.siteById.get(world.over.siteId);
           const name = world.data.sites[site.type].name;
           el.overTitle.textContent = `${article(name)} ${name.toLowerCase()} went down`;
-          el.overText.textContent = "Its queue stayed over capacity for too long.";
+          el.overText.textContent = isStarving(world, site)
+            ? "It went too long without any deliveries."
+            : "Its queue stayed over capacity for too long.";
           el.overScore.textContent = String(world.stats.score);
           el.overDays.textContent = describeSurvival(clock(world).daysSurvived);
           const r = run.result;

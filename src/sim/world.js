@@ -10,6 +10,7 @@
  * a tick, and re-exports the player actions so callers have one import.
  */
 import { createRng } from "../rng.js";
+import { recordFrame } from "./history.js";
 import { initEvents, updateEvents } from "./events.js";
 import { dispatchQueues, movePackets, spawnPackets } from "./packets.js";
 import { initProgression, updateProgression } from "./progression.js";
@@ -19,7 +20,7 @@ import { buildTerrain } from "./grid.js";
 import { updateView } from "./view.js";
 
 export { addSite, siteCapacity } from "./sites.js";
-export { addFirewall, addLink, findLink, makeBackbone, removeLink, rerouteLink, upgradeLink } from "./links.js";
+export { addFirewall, addLink, findLink, makeBackbone, removeLink, reshapeLink, rerouteLink, upgradeLink } from "./links.js";
 export { addCoreRouter, addQos, addSdwan, placeSwitch, placeSwitchOnLink, removeSwitch } from "./equipment.js";
 export { chooseReward } from "./progression.js";
 export { setEventSchedule, triggerEvent } from "./events.js";
@@ -66,6 +67,8 @@ export function createWorld({ config, data, map, seed, outages = true }) {
      * `delivered` (config.rewards.weekly) is already in the inventory.
      */
     pendingReward: null,
+    /** One frame per day for the game-over timelapse (see history.js). */
+    history: [],
     routing: { tables: new Map(), dirty: true, nextRecompute: 0 },
     /** For each day, the closest any site came to an outage (0–1): the daily share grid. */
     dayStress: [0],
@@ -124,6 +127,7 @@ function updateOverload(world) {
     if (site.overload >= seconds) {
       if (world.outages) {
         world.over = { siteId: site.id, time: world.time };
+        recordFrame(world);
         world.events.push({ type: "outage", siteId: site.id });
         return;
       }

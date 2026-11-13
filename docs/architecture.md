@@ -1,4 +1,4 @@
-# Mini Network architecture
+# Nano Networks architecture
 
 This is the map of the code as of Phase 5. It's meant to stay current as
 phases land.
@@ -87,6 +87,7 @@ land between ticks.
 | ...a core router onto a switch | `addCoreRouter` |
 | ...a QoS policy onto a switch | `addQos` |
 | ...a backbone onto a link | `makeBackbone` |
+| Drag a link onto empty map | `reshapeLink` |
 | ...a switch onto empty map / onto a link | `placeSwitch` / `placeSwitchOnLink` |
 | Tap a switch, then its × (or right-click it) | `removeSwitch` |
 | Pick a weekly reward | `chooseReward` |
@@ -144,6 +145,15 @@ land between ticks.
   (`site.served`). At `siteGrowth.deliveries` they grow once: `site.grown`
   scales their drawn size, packet interval and capacity, and a
   `site-grew` event plays a triple pop.
+- **Bending links**: dragging a link and letting go on empty map calls
+  `reshapeLink(world, id, { x, y })`: the same link (tier, firewall,
+  colour) gets the path `autoCells(a → spot) + autoCells(spot → b)`, and
+  the squares and leased lines are settled against the old path. Letting go
+  on a site still calls `rerouteLink`.
+- **Timelapse**: `history.js` records a frame of the network (sites and
+  link paths) at the start of each day and at game over, in
+  `world.history` (left out of snapshots). `ui/timelapse.js` plays it on
+  the game-over card and saves the last frame as a PNG.
 - **Hop limits**: traffic with `maxHops` (VoIP, payments) is dropped if it
   needs more hops: lost points plus `drops.overloadPenalty` on that site's ring.
 - **Day/night**: sites' `activity` multiplies their packet rate; traffic

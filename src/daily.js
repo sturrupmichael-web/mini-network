@@ -42,7 +42,7 @@ function survived(days) {
 /** The text copied by the Share button. */
 export function shareText({ key, mapName, score, days, dayStress, daysPerWeek = 7 }) {
   return [
-    `Mini Network daily ${key}`,
+    `Nano Networks daily ${key}`,
     `${mapName}: ${score} delivered, survived ${survived(days)}`,
     stressGrid(dayStress, daysPerWeek),
   ]

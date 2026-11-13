@@ -30,7 +30,7 @@ export const ITEMS = {
   links: {
     name: "Links",
     hint: "Drag from a site along the grid to another site.",
-    tip: "Drag from one site to another; the link follows your finger square by square, so you can steer around things. Each grid square uses one. Removing a link gives them all back, and more arrive each day.",
+    tip: "Drag from one site to another, square by square, to steer around things. Each square uses one. Drag a link to bend it to a new path, or onto a site to run it through there. Removing a link gives its squares back, and more arrive each day.",
     target: null,
   },
   upgrades: {

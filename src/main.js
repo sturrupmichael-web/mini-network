@@ -19,7 +19,7 @@ function randomSeed() {
 const problems = validateData({ ...GAME_DATA, effects: EFFECT_NAMES });
 if (problems.length) {
   // Bad data is a developer mistake: say exactly what's wrong.
-  console.warn(`Mini Network data problems:\n${problems.join("\n")}`);
+  console.warn(`Nano Networks data problems:\n${problems.join("\n")}`);
 }
 
 // ?seed=… (optionally with &map=… and &mode=…) skips the title screen and
