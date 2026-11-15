@@ -574,6 +574,139 @@ body {
   border: 1px solid var(--line);
 }
 
+/* Game-over run report: weekly deliveries chart and two facts. */
+.report {
+  margin: 0 0 18px;
+  text-align: left;
+}
+
+.report-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 12px;
+}
+
+.report-note {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.report-note[hidden] {
+  display: none;
+}
+
+.report-heading,
+.report-facts dt {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.week-chart {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  height: 96px;
+  padding: 0 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.wk {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wk-val {
+  height: 15px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.wk-peak .wk-val {
+  color: var(--ink);
+}
+
+.wk-track {
+  flex: 1;
+  width: min(100%, 32px);
+  display: flex;
+  align-items: flex-end;
+}
+
+.wk-bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+}
+
+.wk-partial .wk-bar {
+  opacity: 0.45;
+}
+
+.wk-lbl {
+  order: 3;
+  height: 0;
+  overflow: visible;
+  transform: translateY(5px);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.report-facts {
+  display: grid;
+  gap: 12px;
+  margin: 26px 0 0;
+}
+
+.report-facts dd {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+}
+
+.fact[hidden] {
+  display: none;
+}
+
+.fact-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+.fact-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fact-main {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.fact-sub {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .link-btn {
   margin-top: 6px;
   padding: 4px 8px;

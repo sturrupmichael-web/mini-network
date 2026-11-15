@@ -22,6 +22,7 @@ import { updateView } from "./view.js";
 export { addSite, siteCapacity } from "./sites.js";
 export { addFirewall, addLink, findLink, makeBackbone, removeLink, reshapeLink, rerouteLink, upgradeLink } from "./links.js";
 export { addCoreRouter, addQos, addSdwan, placeSwitch, placeSwitchOnLink, removeSwitch } from "./equipment.js";
+export { busiestLink, weeklyDeliveries } from "./runstats.js";
 export { chooseReward } from "./progression.js";
 export { setEventSchedule, triggerEvent } from "./events.js";
 
@@ -54,7 +55,19 @@ export function createWorld({ config, data, map, seed, outages = true }) {
     inventory: { links: config.links.startingCount, ...config.inventory },
     /** Permanent boosts from rewards. */
     bonus: { capacity: 0 },
-    stats: { spawned: 0, delivered: 0, score: 0, sitesAdded: 0, dropped: 0, filtered: 0, lost: 0 },
+    stats: {
+      spawned: 0,
+      delivered: 0,
+      score: 0,
+      sitesAdded: 0,
+      dropped: 0,
+      filtered: 0,
+      lost: 0,
+      /** Packets delivered in each week (index 0 is week 1); see runstats.js. */
+      weekly: [],
+      /** Packets carried by each pair of linked sites, keyed by pairKey(). */
+      carried: {},
+    },
     /** True once the security-rules event has happened (edge links need firewalls). */
     security: false,
     /** Fraction of cloud-eligible traffic sent to the cloud (after a migration). */

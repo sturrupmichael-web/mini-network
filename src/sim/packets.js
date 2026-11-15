@@ -4,6 +4,7 @@
  */
 import { linkBandwidth, linkSpeed } from "./links.js";
 import { nextHop } from "./routing.js";
+import { countCarried, countDelivery } from "./runstats.js";
 import { currentDay, destinationExists, destKeyForTraffic, isNight, randomInterval, recordDelivery, siteMatches, switchTime } from "./sites.js";
 
 /** Create one packet waiting at `site`, heading for destination `to`. */
@@ -135,6 +136,7 @@ export function dispatchQueues(world) {
         continue;
       }
       link.inTransit++;
+      countCarried(world, link);
       packet.at = null;
       packet.from = site.id;
       packet.linkId = link.id;
@@ -171,6 +173,7 @@ export function movePackets(world) {
     if (siteMatches(site, packet.to)) {
       if (traffic.junk) continue; // an attack that got through scores nothing
       world.stats.delivered++;
+      countDelivery(world);
       recordDelivery(world, world.siteById.get(packet.origin), site);
       world.stats.score += traffic.points;
       world.events.push({ type: "delivered", packetId: packet.id, siteId: site.id, traffic: packet.traffic });

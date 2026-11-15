@@ -153,7 +153,15 @@ land between ticks.
 - **Timelapse**: `history.js` records a frame of the network (sites and
   link paths) at the start of each day and at game over, in
   `world.history` (left out of snapshots). `ui/timelapse.js` plays it on
-  the game-over card and saves the last frame as a PNG.
+  the game-over card and saves the last frame as a PNG. Frames keep site
+  ids and link ends so the busiest link can be outlined and the site that
+  went down ringed.
+- **Run report**: `runstats.js` counts packets delivered per week
+  (`stats.weekly`) and packets each pair of linked sites carried
+  (`stats.carried`, keyed by site pair so bending, rerouting or making a
+  backbone keeps the count). `ui/report.js` turns that into the game-over
+  card's weekly bar chart, busiest link and "ended the run" rows; the
+  renderer lifts the busiest link out of the game-over dimming.
 - **Hop limits**: traffic with `maxHops` (VoIP, payments) is dropped if it
   needs more hops: lost points plus `drops.overloadPenalty` on that site's ring.
 - **Day/night**: sites' `activity` multiplies their packet rate; traffic
