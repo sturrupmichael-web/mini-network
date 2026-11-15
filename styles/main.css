@@ -999,3 +999,72 @@ body {
     font-size: 14px;
   }
 }
+
+/* Tap-to-explain card: what the thing you tapped on the map is. It never
+   takes taps, so you can keep drawing straight through it. */
+.map-info {
+  position: fixed;
+  z-index: 18;
+  width: min(300px, calc(100vw - 16px));
+  padding: 10px 12px 11px;
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font: 13px/1.4 var(--font);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
+  animation: map-info-in 0.14s ease-out;
+}
+.map-info[hidden] {
+  display: none;
+}
+.map-info-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.map-info-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+.map-info-icon svg {
+  display: block;
+}
+.map-info-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.map-info-names strong {
+  font-size: 14px;
+}
+.map-info-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+.map-info-text {
+  margin: 7px 0 0;
+}
+.map-info-notes {
+  margin: 6px 0 0;
+  padding: 0 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.map-info-notes:empty {
+  display: none;
+}
+@keyframes map-info-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-info {
+    animation: none;
+  }
+}

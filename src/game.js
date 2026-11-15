@@ -3,13 +3,15 @@
  * This is the only module that knows about all of them.
  */
 import { GAME_DATA, SIM_DATA } from "../data/index.js";
+import { THEME } from "../data/theme.js";
 import { createAudio } from "./audio/audio.js";
 import { dailyChallenge, shareText } from "./daily.js";
 import { attachPointerInput } from "./input/pointer.js";
+import { describe } from "./ui/inspect.js";
 import { createLoop } from "./loop.js";
 import { createCamera, fitCamera, worldToScreen } from "./render/camera.js";
 import { setupCanvas } from "./render/canvas.js";
-import { render } from "./render/renderer.js";
+import { lineColor, render } from "./render/renderer.js";
 import { pointAlong } from "./sim/geometry.js";
 import { configForMap } from "./sim/config.js";
 import { debugStats, grantItems, skipTime, spawnBurst, spawnSite } from "./sim/debug.js";
@@ -203,6 +205,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       if (!run && title.visible) preview(title.mapId);
       easeCamera(performance.now() / 1000);
       if (isHalted(world)) input.cancel();
+      if ((isHalted(world) || title.visible || !run) && hud.infoShown) hud.showInfo(null);
       if (run && world.over && !run.result) finishRun();
       handleEvents();
       if (run && tutorial.active) tutorial.update({ links: world.links.length });
@@ -469,6 +472,18 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     },
     items: GAME_DATA.items,
     onRefused: (reason) => REFUSED_TEXT[reason] && hud.toast(REFUSED_TEXT[reason]),
+    onInspect: (target, at) => {
+      const card = describe(world, GAME_DATA.info, target, {
+        tiers: GAME_DATA.tiers,
+        terrain: GAME_DATA.terrain,
+        colors: THEME[ui.theme],
+        lineColor,
+        selected: target?.kind === "link" && ui.selectedLinkId === target.id,
+      });
+      const rect = canvas.getBoundingClientRect();
+      const point = at && { x: rect.left + at.x, y: rect.top + at.y };
+      hud.showInfo(card, point, ui.insets, CONFIG.input.infoSeconds * 1000);
+    },
   });
 
   // Audio can only start after the player touches something.
