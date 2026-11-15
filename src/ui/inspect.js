@@ -12,6 +12,7 @@
  *   { kind: "closed" }        the shaded part of the map that isn't open yet
  */
 import { isBlocked } from "../sim/links.js";
+import { nodeColor } from "../../data/theme.js";
 
 /**
  * @param {object} world
@@ -28,12 +29,12 @@ export function describe(world, info, target, extra = {}) {
     case "link":
       return describeLink(world, info, world.linkById.get(target.id), extra);
     case "packet":
-      return describePacket(world, info, world.packets.find((p) => p.id === target.id));
+      return describePacket(world, info, world.packets.find((p) => p.id === target.id), extra);
     case "terrain": {
       const kind = extra.terrain?.[target.terrain];
       if (!kind) return null;
       const style = extra.colors?.terrain?.[target.terrain] ?? {};
-      const icon = { type: "terrain", terrain: target.terrain, fill: style.fill, edge: style.edge };
+      const icon = { type: "terrain", terrain: target.terrain, fill: style.fill };
       return card(kind.name, "Terrain", icon, info.terrain[target.terrain]);
     }
     case "boundary":
@@ -72,8 +73,9 @@ function describeSite(world, info, site, extra) {
   if (def.junction && site.jam > 0.02 && !site.core) notes.push(s.jam);
   if (site.qos) notes.push(s.qos);
   if (site.sdwan) notes.push(s.sdwan);
-  const color = site.core ? (extra.colors?.core ?? "#7b5cd6") : def.color;
-  return card(title, def.junction ? "Your gear" : "Site", { type: "site", shape: def.shape, color, core: site.core }, text, notes);
+  const theme = extra.colors?.theme ?? "light";
+  const color = def.junction ? (site.core ? (extra.colors?.core ?? "#4A5560") : "#9AA6B2") : def.node ? nodeColor(def.node, theme) : (extra.colors?.backbone ?? def.color);
+  return card(title, def.junction ? "Your gear" : "Site", { type: "site", shape: def.shape, color, core: site.core, grown: site.grown }, text, notes);
 }
 
 function describeLink(world, info, link, extra) {
@@ -101,12 +103,13 @@ function describeLink(world, info, link, extra) {
   if (link.leased > 0 && !link.backbone) notes.push(s.leased.replace("{n}", String(link.leased)).replace("{s}", link.leased === 1 ? "" : "s"));
   if (extra.selected) notes.push(s.selected);
   const color = extra.lineColor ? extra.lineColor(link.line) : "#888";
-  return card(title, `${name(link.a)} ↔ ${name(link.b)}`, { type: "link", color, tier: link.tier }, text, notes);
+  return card(title, `${name(link.a)} ↔ ${name(link.b)}`, { type: "link", color, tier: link.tier, backbone: Boolean(link.backbone), leased: link.leased > 0 }, text, notes);
 }
 
-function describePacket(world, info, packet) {
+function describePacket(world, info, packet, extra = {}) {
   if (!packet) return null;
   const t = world.data.traffic[packet.traffic];
   if (!t) return null;
-  return card(t.name, "Packet", { type: "packet", shape: t.shape, color: t.color }, info.traffic[packet.traffic]);
+  const color = (t.node && nodeColor(t.node, extra.colors?.theme ?? "light")) || t.color;
+  return card(t.name, "Packet", { type: "packet", shape: t.shape, color, size: t.size }, info.traffic[packet.traffic]);
 }

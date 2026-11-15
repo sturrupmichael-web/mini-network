@@ -47,15 +47,7 @@ export const tests = [
     assert(sw, "switch placed");
     await page.mouse.click(spot.x, spot.y);
     assert((await world(page, () => window.miniNetwork.ui.selectedSiteId)) === sw.id, "selected");
-    const button = await page.evaluate((id) => {
-      const g = window.miniNetwork;
-      const site = g.world.siteById.get(id);
-      const p = g.sitePosition(id);
-      // Mirrors siteRemoveButtonPos in the renderer.
-      const r = 13 * g.world.data.sites[site.type].size * Math.min(1.3, Math.max(0.8, g.camera.scale / 0.8));
-      const br = 13 * Math.min(1.3, Math.max(0.8, g.camera.scale / 0.8));
-      return { x: p.x + r + br * 0.9, y: p.y - r - br * 0.9 };
-    }, sw.id);
+    const button = await page.evaluate((id) => window.miniNetwork.siteRemoveButton(id), sw.id);
     await page.mouse.click(button.x, button.y);
     const left = await world(page, () => ({ sw: window.miniNetwork.world.sites.some((s) => s.type === "switch"), n: window.miniNetwork.world.inventory.switches }));
     assert(!left.sw && left.n === 2, "removed and refunded");

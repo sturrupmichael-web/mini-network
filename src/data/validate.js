@@ -7,6 +7,9 @@ const SITE_SHAPES = ["hub", "circle", "square", "triangle", "cloud", "edge", "sw
 const PACKET_SHAPES = ["circle", "square", "triangle", "diamond"];
 const HOURS = ["any", "day", "night"];
 const SCHEDULE_KEYS = ["day", "every", "weekday", "fromWeek"];
+/** Gameplay colour names (theme.js NODE_ORDER). */
+const NODE_NAMES = ["blue", "red", "yellow", "green", "purple", "teal", "orange", "pink"];
+const PALETTE_NAMES = ["office", "campus", "datacenter"];
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const isPos = (v) => isNum(v) && v > 0;
@@ -43,7 +46,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
 
   // Terrain kinds.
   for (const [id, t] of Object.entries(terrain ?? {})) {
-    if (!["waves", "dots", "hatch"].includes(t?.pattern)) err(`terrain.${id}.pattern must be "waves", "dots" or "hatch"`);
+    if (typeof t?.name !== "string" || !t.name) err(`terrain.${id}.name is missing`);
   }
 
   // Tap-to-explain text: every site, traffic type, tier and terrain kind needs a line.
@@ -91,6 +94,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     const at = `traffic.${id}`;
     if (typeof t.name !== "string" || !t.name) err(`${at}.name is missing`);
     if (typeof t.color !== "string" || !t.color) err(`${at}.color is missing`);
+    if (t.node !== undefined && !NODE_NAMES.includes(t.node)) err(`${at}.node "${t.node}" must be one of ${NODE_NAMES.join(", ")}`);
     if (!PACKET_SHAPES.includes(t.shape)) err(`${at}.shape "${t.shape}" must be one of ${PACKET_SHAPES.join(", ")}`);
     if (!isPos(t.size)) err(`${at}.size must be > 0`);
     if (!isNum(t.points)) err(`${at}.points must be a number`);
@@ -112,6 +116,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     if (typeof s.name !== "string" || !s.name) err(`${at}.name is missing`);
     if (!SITE_SHAPES.includes(s.shape)) err(`${at}.shape "${s.shape}" must be one of ${SITE_SHAPES.join(", ")}`);
     if (typeof s.color !== "string" || !s.color) err(`${at}.color must be a CSS colour string`);
+    if (s.node !== undefined && !NODE_NAMES.includes(s.node)) err(`${at}.node "${s.node}" must be one of ${NODE_NAMES.join(", ")}`);
     if (!isPos(s.size)) err(`${at}.size must be > 0`);
     if (!isPos(s.capacity)) err(`${at}.capacity must be > 0`);
     if (s.packetInterval !== null) {
@@ -208,6 +213,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     else if (mapIds.has(m.id)) err(`${at}.id is a duplicate`);
     mapIds.add(m.id);
     if (typeof m.name !== "string" || !m.name) err(`${at}.name is missing`);
+    if (m.palette !== undefined && !PALETTE_NAMES.includes(m.palette)) err(`${at}.palette must be one of ${PALETTE_NAMES.join(", ")}`);
     if (!isPos(m.width) || !isPos(m.height)) err(`${at} needs a positive width and height`);
     if (!Array.isArray(m.start) || m.start.length === 0) {
       err(`${at}.start must list at least one site`);

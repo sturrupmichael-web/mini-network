@@ -3,7 +3,7 @@
  * This is the only module that knows about all of them.
  */
 import { GAME_DATA, SIM_DATA } from "../data/index.js";
-import { THEME } from "../data/theme.js";
+import { mapColors } from "../data/theme.js";
 import { createAudio } from "./audio/audio.js";
 import { dailyChallenge, shareText } from "./daily.js";
 import { attachPointerInput } from "./input/pointer.js";
@@ -11,7 +11,7 @@ import { describe } from "./ui/inspect.js";
 import { createLoop } from "./loop.js";
 import { createCamera, fitCamera, worldToScreen } from "./render/camera.js";
 import { setupCanvas } from "./render/canvas.js";
-import { lineColor, render } from "./render/renderer.js";
+import { lineColor, render, siteRemoveButtonPos } from "./render/renderer.js";
 import { pointAlong } from "./sim/geometry.js";
 import { configForMap } from "./sim/config.js";
 import { debugStats, grantItems, skipTime, spawnBurst, spawnSite } from "./sim/debug.js";
@@ -119,7 +119,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     const dark = settings.theme === "dark" || (settings.theme === "system" && darkQuery?.matches);
     ui.theme = dark ? "dark" : "light";
     document.documentElement.dataset.theme = ui.theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#1d1e22" : "#f6f4ef");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#1F2329" : "#EFE9DC");
   }
   darkQuery?.addEventListener?.("change", applyTheme);
   applyTheme();
@@ -238,13 +238,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
         const site = world.siteById.get(e.siteId);
         if (site && ui.pops.length < 40) {
           const p = worldToScreen(camera, site.x, site.y);
-          ui.pops.push({ x: p.x, y: p.y, born: now, color: world.data.traffic[e.traffic].color });
-        }
-      } else if (e.type === "site-grew") {
-        const site = world.siteById.get(e.siteId);
-        if (site) {
-          const p = worldToScreen(camera, site.x, site.y);
-          for (let i = 0; i < 3; i++) ui.pops.push({ x: p.x, y: p.y, born: now + i * 0.15, color: world.data.sites[site.type].color });
+          ui.pops.push({ x: p.x, y: p.y, born: now, traffic: e.traffic });
         }
       } else if (e.type === "event") audio.cue("event");
       else if (e.type === "dropped") audio.cue("drop");
@@ -476,7 +470,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       const card = describe(world, GAME_DATA.info, target, {
         tiers: GAME_DATA.tiers,
         terrain: GAME_DATA.terrain,
-        colors: THEME[ui.theme],
+        colors: mapColors(ui.theme, map.palette),
         lineColor,
         selected: target?.kind === "link" && ui.selectedLinkId === target.id,
       });
@@ -558,6 +552,10 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     sitePosition(id) {
       const site = world.siteById.get(id);
       return worldToScreen(camera, site.x, site.y);
+    },
+    /** Screen position of a selected switch's remove button (tests). */
+    siteRemoveButton(id) {
+      return siteRemoveButtonPos(world, world.siteById.get(id), camera);
     },
     /** Screen position of the point halfway along a link. */
     linkMidpoint(id) {

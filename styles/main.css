@@ -1,25 +1,50 @@
+/* Nano Networks style guide (docs/style-guide.md): UI chrome is only ever
+   neutral, so colour on screen always means gameplay. DM Sans, inlined by
+   the build (styles/fonts, SIL Open Font License). */
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("fonts/dm-sans-latin.woff2") format("woff2");
+}
+
 :root {
-  --bg: #f6f4ef;
-  --ink: #2b2b2b;
-  --muted: #8a8780;
-  --panel: rgba(255, 255, 255, 0.86);
+  /* The map's ground (office palette); the canvas paints the real one. */
+  --bg: #efe9dc;
+  --map: #efe9dc;
+  --ink: #2e3238;
+  --muted: #7f7b72;
+  --panel: #ffffff;
   --card: #ffffff;
-  --line: #ebe8e1;
-  --scrim: rgba(246, 244, 239, 0.6);
-  --accent: #2f80ed;
+  --line: #ebe6dc;
+  --scrim: rgba(239, 233, 220, 0.6);
+  --accent: #4a5560;
+  --icon: #4a5560;
+  --dial-fill: rgba(74, 85, 96, 0.28);
+  /* Depth tiers: soft, warm drop shadows (never pure black). */
+  --shadow-1: 0.5px 1px 2px rgba(60, 48, 36, 0.18);
+  --shadow-2: 1px 2px 4px rgba(60, 48, 36, 0.18);
+  --shadow-3: 1.5px 3px 6px rgba(60, 48, 36, 0.18);
   color-scheme: light;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 [data-theme="dark"] {
-  --bg: #1d1e22;
+  --bg: #1f2329;
+  --map: #1f2329;
   --ink: #e9e6df;
-  --muted: #9a978f;
-  --panel: rgba(44, 45, 51, 0.9);
-  --card: #2a2b31;
-  --line: #3a3b42;
-  --scrim: rgba(20, 21, 24, 0.6);
-  --accent: #56a0ff;
+  --muted: #9aa6b2;
+  --panel: #2a3038;
+  --card: #2a3038;
+  --line: #3a414b;
+  --scrim: rgba(21, 24, 28, 0.6);
+  --accent: #9aa6b2;
+  --icon: #c7cfd7;
+  --dial-fill: rgba(154, 166, 178, 0.32);
+  --shadow-1: 0.5px 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 1px 2px 4px rgba(0, 0, 0, 0.35);
+  --shadow-3: 1.5px 3px 6px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
 
@@ -71,23 +96,43 @@ body {
   padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
 }
 
+/* Score, top left: a packet and the delivered count. */
 .hud-score {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 9px;
+}
+
+.hud-score-icon {
+  width: 18px;
+  height: 11px;
+  border-radius: 6px;
+  background: var(--ink);
+  box-shadow: var(--shadow-1);
 }
 
 .hud-score-value {
   font-size: 28px;
-  font-weight: 650;
+  font-weight: 500;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
+/* Read out with the score; the packet icon says it on screen. */
 .hud-score-label {
-  font-size: 13px;
-  color: var(--muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .hud-controls {
@@ -97,16 +142,17 @@ body {
 }
 
 .hud-btn {
-  min-width: 40px;
-  height: 40px;
+  min-width: 38px;
+  height: 38px;
   padding: 0 10px;
   border: 0;
-  border-radius: 20px;
+  border-radius: 19px;
   background: var(--panel);
   color: var(--ink);
   font: 600 14px var(--font);
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-2);
 }
 
 .hud-btn[aria-pressed="true"] {
@@ -119,6 +165,7 @@ body {
   outline-offset: 2px;
 }
 
+/* Toolbar, bottom centre: no panel, just flat tool tokens with count badges. */
 .hud-tray {
   position: absolute;
   left: 50%;
@@ -127,29 +174,45 @@ body {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 4px;
-  padding: 6px 8px;
-  border-radius: 26px;
-  background: var(--panel);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  gap: 12px;
+  padding: 8px 4px 0;
   pointer-events: auto;
   max-width: calc(100vw - 16px);
 }
 
 .tray-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 10px;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
   border: 0;
-  border-radius: 20px;
-  background: transparent;
-  color: var(--ink);
-  font: 600 15px var(--font);
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+  color: var(--icon);
+  font: 600 12px var(--font);
   font-variant-numeric: tabular-nums;
   cursor: grab;
   touch-action: none;
+}
+
+/* The count badge on each tool. */
+.tray-count {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--panel);
+  font: 600 12px/20px var(--font);
+  text-align: center;
+  box-shadow: var(--shadow-1);
 }
 
 .tray-item[hidden] {
@@ -169,7 +232,13 @@ body {
 
 .tray-item.armed {
   background: var(--ink);
-  color: var(--bg);
+  color: var(--panel);
+  --icon: var(--panel);
+}
+
+.tray-item.armed .tray-count {
+  background: var(--panel);
+  color: var(--ink);
 }
 
 .tray-item:focus-visible {
@@ -182,94 +251,82 @@ body {
   flex: none;
 }
 
+/* Tool icons: flat neutral shapes (colour only ever means traffic). */
 .tray-icon-links {
-  width: 22px;
-  height: 6px;
-  border-radius: 3px;
-  background: #e8483f;
+  width: 24px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--icon);
 }
 
 .tray-icon-upgrades {
-  width: 22px;
-  height: 11px;
+  width: 24px;
+  height: 12px;
   border-radius: 6px;
-  background: linear-gradient(90deg, #e8483f 0 30%, transparent 30% 42%, #e8483f 42%);
+  background: linear-gradient(90deg, var(--icon) 0 32%, transparent 32% 44%, var(--icon) 44%);
 }
 
 .tray-icon-switches {
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
-  background: radial-gradient(circle at 30% 30%, #fff 0 1.6px, transparent 2px), radial-gradient(circle at 70% 30%, #fff 0 1.6px, transparent 2px),
-    radial-gradient(circle at 30% 70%, #fff 0 1.6px, transparent 2px), radial-gradient(circle at 70% 70%, #fff 0 1.6px, transparent 2px), var(--ink);
-}
-
-.tray-item.armed .tray-icon-switches {
-  outline: 1.5px solid var(--bg);
+  /* A roundabout. */
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 5px solid var(--icon);
 }
 
 .tray-icon-firewalls {
-  width: 18px;
-  height: 13px;
-  border-radius: 3px;
-  background: linear-gradient(#fff, #fff) 0 50% / 100% 1.5px no-repeat, linear-gradient(#fff, #fff) 50% 0 / 1.5px 50% no-repeat, #f2994a;
+  /* A gate across a cable. */
+  width: 24px;
+  height: 18px;
+  background: linear-gradient(var(--icon), var(--icon)) 50% 50% / 100% 6px no-repeat, linear-gradient(var(--icon), var(--icon)) 50% 50% / 7px 100% no-repeat;
+  border-radius: 4px;
 }
 
 .tray-icon-sdwan {
-  width: 14px;
+  /* A small box. */
+  width: 20px;
   height: 14px;
-  border-radius: 50%;
-  background: radial-gradient(circle, transparent 0 3px, #fff 3px 4.5px, transparent 4.5px), #13a8b5;
+  border-radius: 4px;
+  background: radial-gradient(circle at 70% 50%, var(--panel) 0 2px, transparent 2.4px), var(--icon);
 }
 
 .tray-icon-routers {
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  background: radial-gradient(circle, #fff 0 2px, transparent 2.4px), radial-gradient(circle, transparent 0 5px, #fff 5px 6.4px, transparent 6.8px), #7b5cd6;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 7px solid var(--icon);
 }
 
 .tray-icon-qos {
-  /* A fast-lane chevron on a teal badge. */
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #13a8b5;
-  position: relative;
-}
-
-.tray-icon-qos::after {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 4.5px;
-  width: 5px;
-  height: 5px;
-  border-top: 2px solid #fff;
-  border-right: 2px solid #fff;
-  transform: rotate(45deg);
+  /* A three-dot traffic light. */
+  width: 10px;
+  height: 22px;
+  border-radius: 5px;
+  background: radial-gradient(circle at 50% 4.5px, var(--panel) 0 2.3px, transparent 2.6px), radial-gradient(circle at 50% 11px, var(--panel) 0 2.3px, transparent 2.6px),
+    radial-gradient(circle at 50% 17.5px, var(--panel) 0 2.3px, transparent 2.6px), var(--icon);
 }
 
 .tray-icon-backbone {
-  width: 24px;
-  height: 9px;
-  border-radius: 4.5px;
-  background: repeating-linear-gradient(90deg, #fff 0 4px, transparent 4px 7px) 3px 50% / calc(100% - 6px) 1.6px no-repeat, #e8483f;
+  width: 26px;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--icon);
 }
 
 .tray-icon-capacity {
-  /* A queue getting longer: three waiting packets. */
-  width: 20px;
-  height: 8px;
-  background: radial-gradient(circle at 4px 50%, var(--ink) 0 3px, transparent 3.4px), radial-gradient(circle at 10px 50%, var(--ink) 0 3px, transparent 3.4px),
-    radial-gradient(circle at 16px 50%, var(--ink) 0 3px, transparent 3.4px);
+  /* A queue getting longer: three parked packets. */
+  width: 24px;
+  height: 7px;
+  background: linear-gradient(90deg, var(--icon) 0 6.5px, transparent 6.5px 8.75px, var(--icon) 8.75px 15.25px, transparent 15.25px 17.5px, var(--icon) 17.5px);
+  border-radius: 3.5px;
 }
 
 .tray-icon-leased {
-  width: 22px;
-  height: 8px;
-  border-radius: 4px;
-  background: linear-gradient(#fff, #fff) 0 50% / 100% 2px no-repeat, #2f80ed;
+  /* A cable with rails. */
+  width: 24px;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(var(--panel), var(--panel)) 50% 50% / calc(100% - 4px) 5px no-repeat, var(--icon);
 }
 
 .hud-coach {
@@ -401,22 +458,31 @@ body {
   gap: 2px;
 }
 
+/* Clock, top right: seven ticks for the days; a wedge fills through the week. */
 .hud-clock {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font-size: 13px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
-/* A little dial that fills through the day. */
 .hud-clock-dial {
-  --day: 0%;
-  width: 12px;
-  height: 12px;
+  --week: 0%;
+  position: relative;
+  display: block;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: conic-gradient(var(--ink) var(--day), rgba(0, 0, 0, 0.1) 0);
+  color: var(--muted);
+  background: conic-gradient(var(--dial-fill) var(--week), var(--panel) 0);
+  box-shadow: var(--shadow-2);
+}
+
+.hud-clock-dial svg {
+  position: absolute;
+  inset: 0;
 }
 
 .overlay {
@@ -447,7 +513,7 @@ body {
   border-radius: 20px;
   background: var(--card);
   color: var(--ink);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-3), 0 12px 32px rgba(60, 48, 36, 0.1);
   max-height: calc(100% - 16px);
   overflow-y: auto;
   text-align: center;
@@ -490,71 +556,130 @@ body {
   color: var(--muted);
 }
 
+/* Weekly upgrade: the world dims to 70% and two cards rise in, 60 ms apart. */
+.overlay[data-hud="reward"] {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.overlay[data-hud="reward"] > .card {
+  width: auto;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.overlay[data-hud="reward"] .card-kicker,
+.overlay[data-hud="reward"] h2,
+.overlay[data-hud="reward"] .reward-delivered {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.overlay[data-hud="reward"] .reward-delivered-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.overlay[data-hud="reward"] .reward-delivered .tray-icon {
+  --icon: #fff;
+  --panel: transparent;
+}
+
 .reward-options {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
 }
 
 .reward-icons {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
-  min-height: 24px;
+  justify-content: center;
+  gap: 8px 12px;
+  min-height: 56px;
   align-items: center;
-  margin-bottom: 4px;
 }
 
 .reward-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 13px;
-  font-weight: 650;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .reward-btn {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
-  border: 2px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 160px;
+  min-height: 200px;
+  padding: 18px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--card);
   color: var(--ink);
+  box-shadow: var(--shadow-3);
   font: inherit;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
+  animation: card-rise 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  transition: transform 0.12s ease;
+}
+
+.reward-btn:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.reward-btn:nth-child(3) {
+  animation-delay: 120ms;
 }
 
 .reward-btn:hover,
 .reward-btn:focus-visible {
-  border-color: var(--ink);
+  transform: translateY(-3px);
   outline: none;
+}
+
+.reward-btn:focus-visible {
+  box-shadow: var(--shadow-3), 0 0 0 2px var(--accent);
 }
 
 .reward-btn strong {
   font-size: 16px;
+  font-weight: 600;
 }
 
 .reward-btn .reward-detail {
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.35;
   color: var(--muted);
 }
 
-.reward-btn {
-  transition: transform 0.12s ease, border-color 0.12s ease;
-}
-
-.reward-btn:hover {
-  transform: translateY(-2px);
+@keyframes card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .reward-btn,
   .reward-btn:hover {
+    animation: none;
     transition: none;
     transform: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .reward-options {
+    gap: 10px;
+  }
+  .reward-btn {
+    width: 148px;
   }
 }
 
@@ -787,8 +912,8 @@ body {
   margin: 0 20px 0 19px;
   background: var(--ink);
   box-shadow:
-    -22px 0 0 -3px #e8483f,
-    22px 0 0 -3px #2fa66a;
+    -22px 0 0 -3px var(--muted),
+    22px 0 0 -3px var(--muted);
 }
 
 .title-tagline {
@@ -1099,37 +1224,63 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Phones: smaller top buttons so the whole row fits beside the score. */
+/* Phones: smaller top buttons so the whole row fits beside the score, and
+   the clock is just its dial. */
 @media (max-width: 440px) {
   .hud-top {
     align-items: flex-start;
+  }
+  .hud-right {
+    gap: 8px;
   }
   .hud-controls {
     gap: 4px;
     flex-shrink: 0;
   }
   .hud-btn {
-    min-width: 34px;
-    height: 34px;
-    padding: 0 6px;
-    border-radius: 17px;
-    font-size: 13px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 5px;
+    border-radius: 16px;
+    font-size: 12px;
   }
   .hud-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
+  }
+  .hud-clock-text {
+    display: none;
+  }
+  .hud-clock-dial {
+    width: 32px;
+    height: 32px;
+  }
+  .hud-score-value {
+    font-size: 24px;
   }
   /* With every tool unlocked the tray wraps onto a second row. */
   .hud-tray {
-    gap: 2px;
-    padding: 5px 6px;
+    gap: 10px 12px;
     width: max-content;
   }
+  .hud-tray {
+    gap: 9px 8px;
+  }
   .tray-item {
-    gap: 5px;
-    min-height: 38px;
-    padding: 0 8px;
-    font-size: 14px;
+    width: 38px;
+    height: 38px;
+  }
+  .tray-count {
+    top: -6px;
+    right: -6px;
+    min-width: 19px;
+    height: 17px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 17px;
+  }
+  .hud-run {
+    white-space: nowrap;
   }
 }
 

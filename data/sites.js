@@ -6,9 +6,13 @@
  *   shape           How it is drawn: "hub" | "circle" | "square" |
  *                   "triangle" | "cloud" | "edge" | "switch" |
  *                   "district".
- *   color           Fill colour (any CSS colour). Each type has its own so
- *                   you can tell sites apart at a glance; all get a white
- *                   outline.
+ *   color           Fill colour (any CSS colour), used where the theme's
+ *                   colour isn't known (info cards, the run report).
+ *   node            Optional gameplay colour name from theme.js NODE
+ *                   ("blue", "red", …): the map draws the site in that
+ *                   colour for the current theme. A site and the traffic
+ *                   it trades share a colour. Leave it out for neutral
+ *                   pieces (the data center, switches).
  *   size            Drawing size multiplier (1 = a normal site).
  *   capacity        Packets the queue can hold before the site starts to
  *                   overload (its ring timer fills).
@@ -42,7 +46,7 @@ export const SITE_TYPES = {
   datacenter: {
     name: "Data center",
     shape: "hub",
-    color: "#33415c",
+    color: "#4A5560",
     size: 1.5,
     capacity: 40,
     packetInterval: null,
@@ -54,7 +58,8 @@ export const SITE_TYPES = {
   office: {
     name: "Office",
     shape: "circle",
-    color: "#2f80ed",
+    color: "#3E8ED0",
+    node: "blue",
     size: 1,
     capacity: 8,
     packetInterval: [2.2, 4.5],
@@ -67,7 +72,8 @@ export const SITE_TYPES = {
   warehouse: {
     name: "Warehouse",
     shape: "square",
-    color: "#f2994a",
+    color: "#F2B33D",
+    node: "yellow",
     size: 1,
     capacity: 10,
     packetInterval: [3.5, 6],
@@ -81,7 +87,8 @@ export const SITE_TYPES = {
   retail: {
     name: "Retail branch",
     shape: "triangle",
-    color: "#2fa66a",
+    color: "#4FAE6A",
+    node: "green",
     size: 1,
     capacity: 7,
     packetInterval: [2.8, 5],
@@ -95,7 +102,8 @@ export const SITE_TYPES = {
   logistics: {
     name: "Logistics hub",
     shape: "district",
-    color: "#c2601a",
+    color: "#F2B33D",
+    node: "yellow",
     size: 1.3,
     capacity: 36,
     packetInterval: null,
@@ -109,7 +117,8 @@ export const SITE_TYPES = {
   payhub: {
     name: "Payment gateway",
     shape: "district",
-    color: "#1f8a50",
+    color: "#4FAE6A",
+    node: "green",
     size: 1.3,
     capacity: 36,
     packetInterval: null,
@@ -123,7 +132,8 @@ export const SITE_TYPES = {
   cloud: {
     name: "Cloud region",
     shape: "cloud",
-    color: "#56b4e9",
+    color: "#EE8A3C",
+    node: "orange",
     size: 1.35,
     capacity: 40,
     packetInterval: null,
@@ -135,7 +145,8 @@ export const SITE_TYPES = {
   edge: {
     name: "Internet edge",
     shape: "edge",
-    color: "#9b51e0",
+    color: "#E2574C",
+    node: "red",
     size: 1.25,
     capacity: 30,
     packetInterval: null,
@@ -147,7 +158,7 @@ export const SITE_TYPES = {
   switch: {
     name: "Switch",
     shape: "switch",
-    color: "#6b6f76",
+    color: "#9AA6B2",
     size: 0.7,
     capacity: 24,
     packetInterval: null,
