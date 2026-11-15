@@ -153,7 +153,7 @@ export const CONFIG = {
      * Global multiplier on every site's packet interval (see sites.js).
      * 1 = as written, 0.5 = packets twice as often.
      */
-    packetIntervalScale: 1,
+    packetIntervalScale: 1.15,
     /** Game seconds before the first packets appear. */
     graceSeconds: 4,
     /**
@@ -164,7 +164,7 @@ export const CONFIG = {
     warmupDays: 3,
     warmupScale: 2.5,
     /** Game seconds a newly arrived site waits before sending, so you have time to connect it. */
-    newSiteGrace: 10,
+    newSiteGrace: 13,
     /**
      * Traffic grows each week: packet intervals are multiplied by this at
      * the start of every new week (0.9 = 10% more traffic per week)...
@@ -177,7 +177,7 @@ export const CONFIG = {
      * region), sites wait this many seconds before sending traffic to it,
      * so you have time to connect it.
      */
-    newDestinationDelay: 20,
+    newDestinationDelay: 25,
   },
 
   grid: {
@@ -202,13 +202,13 @@ export const CONFIG = {
 
   growth: {
     /** Game seconds before the first new site appears. */
-    firstSiteAt: 40,
+    firstSiteAt: 50,
     /** Seconds between new sites at the start. */
-    interval: 40,
+    interval: 50,
     /** Each new site shortens the gap: interval × this, every time. */
     intervalDecay: 0.95,
     /** The gap never gets shorter than this many seconds. */
-    minInterval: 12,
+    minInterval: 15,
     /**
      * New sites appear within this distance (wu) of the data center at
      * first, so the network grows outward. The radius grows every day.
@@ -252,8 +252,8 @@ export const CONFIG = {
      * each packet delivered there takes one away. With maxPips pips its
      * overload ring fills, just like a site whose queue is too long.
      */
-    startDelay: 30,
-    secondsPerPip: 10,
+    startDelay: 38,
+    secondsPerPip: 12,
     maxPips: 5,
   },
 
@@ -275,7 +275,7 @@ export const CONFIG = {
      * timer fills. If it stays full for this many game seconds: outage,
      * game over.
      */
-    seconds: 20,
+    seconds: 25,
     /**
      * When the queue is back under capacity the timer drains at this many
      * seconds per second (2 = recovers twice as fast as it fills).
@@ -301,7 +301,7 @@ export const CONFIG = {
 
   time: {
     /** Game seconds in one in-game day (a day at 1× takes this long). */
-    secondsPerDay: 30,
+    secondsPerDay: 38,
     /** Days per week. The game pauses for a reward at the end of each week. */
     daysPerWeek: 7,
   },
