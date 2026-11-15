@@ -307,7 +307,7 @@ function drawBoundaries(ctx, world, camera, colors, k) {
   }
 }
 
-function lineColor(line) {
+export function lineColor(line) {
   return THEME.lineColors[line % THEME.lineColors.length];
 }
 
@@ -535,16 +535,69 @@ function drawPacketShape(ctx, shape, x, y, r) {
 }
 
 function drawTravellingPackets(ctx, world, camera, k) {
+  for (const p of travellingPacketSpots(world, camera, k)) {
+    const traffic = world.data.traffic[p.packet.traffic];
+    ctx.fillStyle = traffic.color;
+    drawPacketShape(ctx, traffic.shape, p.x, p.y, p.r);
+  }
+}
+
+/** Where each travelling packet is drawn on screen: [{ packet, x, y, r }]. */
+function travellingPacketSpots(world, camera, k) {
+  const out = [];
   for (const packet of world.packets) {
     if (packet.linkId === null) continue;
     const link = world.linkById.get(packet.linkId);
+    if (!link) continue;
     const dist = packet.dir === 0 ? packet.progress : link.length - packet.progress;
     const p = pointAlong(link.path, dist);
     const s = worldToScreen(camera, p.x, p.y);
     const traffic = world.data.traffic[packet.traffic];
-    ctx.fillStyle = traffic.color;
-    drawPacketShape(ctx, traffic.shape, s.x, s.y, THEME.sizes.packetRadius * k * Math.sqrt(traffic.size));
+    out.push({ packet, x: s.x, y: s.y, r: THEME.sizes.packetRadius * k * Math.sqrt(traffic.size) });
   }
+  return out;
+}
+
+/** Where a site's waiting packets are drawn: [{ packet, x, y, r }] (at most three rows of six). */
+function queuedPacketSpots(world, camera, site, k, byId) {
+  if (site.queue.length === 0) return [];
+  const { x, y } = worldToScreen(camera, site.x, site.y);
+  const r = siteRadiusPx(world, site, camera);
+  const pr = THEME.sizes.packetRadius * k;
+  const gap = pr * 2.6;
+  const perRow = 6;
+  // Show at most three rows; a long queue is already shouting via its ring.
+  const out = [];
+  site.queue.slice(0, perRow * 3).forEach((id, i) => {
+    const packet = byId.get(id);
+    if (!packet) return;
+    const col = i % perRow;
+    const row = Math.floor(i / perRow);
+    out.push({ packet, x: x + r + gap * 0.9 + col * gap, y: y - r * 0.6 + row * gap, r: pr });
+  });
+  return out;
+}
+
+/**
+ * The packet drawn nearest screen point p (travelling or waiting in a
+ * queue), within `radius` px of its edge, or null. For tap-to-explain.
+ */
+export function packetAt(world, camera, p, radius) {
+  const k = uiScale(camera);
+  const byId = new Map();
+  for (const q of world.packets) byId.set(q.id, q);
+  const spots = travellingPacketSpots(world, camera, k);
+  for (const site of world.sites) spots.push(...queuedPacketSpots(world, camera, site, k, byId));
+  let best = null;
+  let bestD = Infinity;
+  for (const s of spots) {
+    const d = Math.hypot(s.x - p.x, s.y - p.y) - s.r;
+    if (d <= radius && d < bestD) {
+      best = s.packet;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 /** The ring timer: fills clockwise from the top as the site stays overloaded. */
@@ -827,24 +880,13 @@ function easeOutBack(t) {
 /** Waiting packets sit in a small grid to the right of their site. */
 function drawQueue(ctx, world, camera, site, k) {
   if (site.queue.length === 0) return;
-  const { x, y } = worldToScreen(camera, site.x, site.y);
-  const r = siteRadiusPx(world, site, camera);
-  const pr = THEME.sizes.packetRadius * k;
-  const gap = pr * 2.6;
-  const perRow = 6;
-  // Show at most three rows; a long queue is already shouting via its ring.
-  const shown = site.queue.slice(0, perRow * 3);
   const byId = new Map();
   for (const p of world.packets) byId.set(p.id, p);
-  shown.forEach((id, i) => {
-    const packet = byId.get(id);
-    if (!packet) return;
-    const traffic = world.data.traffic[packet.traffic];
-    const col = i % perRow;
-    const row = Math.floor(i / perRow);
+  for (const p of queuedPacketSpots(world, camera, site, k, byId)) {
+    const traffic = world.data.traffic[p.packet.traffic];
     ctx.fillStyle = traffic.color;
-    drawPacketShape(ctx, traffic.shape, x + r + gap * 0.9 + col * gap, y - r * 0.6 + row * gap, pr);
-  });
+    drawPacketShape(ctx, traffic.shape, p.x, p.y, p.r);
+  }
 }
 
 function drawRemoveButton(ctx, camera, colors, { x, y }) {

@@ -21,7 +21,7 @@ function pointInPolygon(x, y, poly) {
   return inside;
 }
 
-export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects, modes, audio, terrain }) {
+export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects, modes, audio, terrain, info }) {
   const errors = [];
   const err = (msg) => errors.push(msg);
 
@@ -44,6 +44,21 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
   // Terrain kinds.
   for (const [id, t] of Object.entries(terrain ?? {})) {
     if (!["waves", "dots", "hatch"].includes(t?.pattern)) err(`terrain.${id}.pattern must be "waves", "dots" or "hatch"`);
+  }
+
+  // Tap-to-explain text: every site, traffic type, tier and terrain kind needs a line.
+  if (info) {
+    const need = [
+      ["sites", Object.keys(sites ?? {})],
+      ["traffic", Object.keys(traffic ?? {})],
+      ["tiers", (tiers ?? []).map((t) => t.id)],
+      ["terrain", Object.keys(terrain ?? {})],
+    ];
+    for (const [section, ids] of need) {
+      for (const id of ids) {
+        if (typeof info[section]?.[id] !== "string" || !info[section][id]) err(`info.${section}.${id} needs a description`);
+      }
+    }
   }
 
   // Rewards.

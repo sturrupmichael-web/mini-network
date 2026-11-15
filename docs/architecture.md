@@ -347,3 +347,19 @@ http, and `index.html` from disk. Any console error fails a browser test.
 - **Replays**: the game-over card has "Same seed" (not for the daily), which
   replays that game once; "Play again" picks a new seed. The title screen's
   map cards show each map's best for the chosen mode.
+
+## Tap to explain
+
+A tap or click (no drag) on anything on the map shows a small card saying
+what it is. `input/pointer.js` works out what was under the pointer (a site,
+a link, a packet travelling or queued, terrain, a carrier boundary, or the
+closed part of the map, using `packetAt` from the renderer for packets) and
+calls `onInspect`. `ui/inspect.js` (pure, tested in node) turns that into a
+title, an icon, a description, and one extra line for each thing happening
+to it right now: overload ring, queue, hunger pips, growth, jam, core router,
+QoS, SD-WAN, cut, blocked, firewall, backbone, leased lines. The text lives
+in `data/info.js`, and the data check fails if a site type, traffic type,
+link tier or terrain kind has no description. The HUD card
+(`hud.showInfo`) sits above the tap point, has `pointer-events: none` so
+drawing carries on straight through it, hides on the next press, and fades
+after `config.input.infoSeconds`.

@@ -6,6 +6,7 @@ import { AUDIO } from "./audio.js";
 import { CONFIG } from "./config.js";
 import { ITEMS, LINK_TIERS } from "./equipment.js";
 import { EVENTS } from "./events.js";
+import { INFO } from "./info.js";
 import { MAPS } from "./maps.js";
 import { MODES } from "./modes.js";
 import { REWARD_GRANTS, REWARDS } from "./rewards.js";
@@ -26,6 +27,7 @@ export const GAME_DATA = {
   modes: MODES,
   audio: AUDIO,
   terrain: TERRAIN_TYPES,
+  info: INFO,
 };
 
 /** The subset the simulation needs (createWorld's `data`). */

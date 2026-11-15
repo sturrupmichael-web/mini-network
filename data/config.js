@@ -325,6 +325,11 @@ export const CONFIG = {
     /** How close (px) a dropped tray item must land to a link or site to apply to it. */
     mouseDropRadius: 16,
     touchDropRadius: 30,
+    /** How close (px) a tap must be to a packet to explain it instead of the link or map under it. */
+    mousePacketRadius: 4,
+    touchPacketRadius: 8,
+    /** How long (ms) the tap-to-explain card stays up if you don't tap again. */
+    infoSeconds: 9,
   },
 
   view: {

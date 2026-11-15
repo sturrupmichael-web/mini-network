@@ -93,6 +93,17 @@ export function createHud(root, opts) {
       <span data-hud="tip-text"></span>
       <span class="tray-tip-count" data-hud="tip-count"></span>
     </div>
+    <div class="map-info" data-hud="info" role="status" aria-live="polite" hidden>
+      <div class="map-info-head">
+        <span class="map-info-icon" data-hud="info-icon" aria-hidden="true"></span>
+        <span class="map-info-names">
+          <strong data-hud="info-title"></strong>
+          <span class="map-info-sub" data-hud="info-sub"></span>
+        </span>
+      </div>
+      <p class="map-info-text" data-hud="info-text"></p>
+      <ul class="map-info-notes" data-hud="info-notes"></ul>
+    </div>
     <div class="hud-coach" data-hud="coach" role="status" aria-live="polite" hidden>
       <span data-hud="coach-text"></span>
       <button type="button" class="text-btn" data-hud="coach-skip">Skip</button>
@@ -172,6 +183,12 @@ export function createHud(root, opts) {
     coach: q("coach"),
     coachText: q("coach-text"),
     coachSkip: q("coach-skip"),
+    info: q("info"),
+    infoIcon: q("info-icon"),
+    infoTitle: q("info-title"),
+    infoSub: q("info-sub"),
+    infoText: q("info-text"),
+    infoNotes: q("info-notes"),
     share: q("share"),
     shareText: q("share-text"),
     shareBtn: q("share-btn"),
@@ -272,6 +289,7 @@ export function createHud(root, opts) {
   });
 
   let toastTimer = 0;
+  let infoTimer = 0;
   let tickerTimer = 0;
   let stopTimelapse = () => {};
   const shown = {
@@ -432,6 +450,52 @@ export function createHud(root, opts) {
       clearTimeout(tickerTimer);
       tickerTimer = setTimeout(() => el.ticker.classList.remove("show"), 5500);
     },
+    /**
+     * Show the tap-to-explain card (ui/inspect.js) near a screen point,
+     * above it if there's room so a finger doesn't cover it. It never
+     * takes taps itself, so drawing carries on underneath.
+     * @param {object | null} info  null hides it.
+     * @param {{ x: number, y: number }} [at]  Client (viewport) px.
+     * @param {{ top: number, bottom: number }} [insets]  HUD space to stay clear of.
+     */
+    showInfo(info, at, insets = { top: 0, bottom: 0 }, hideAfterMs = 0) {
+      clearTimeout(infoTimer);
+      if (!info) {
+        el.info.hidden = true;
+        return;
+      }
+      el.infoIcon.innerHTML = infoIconSvg(info.icon);
+      el.infoTitle.textContent = info.title;
+      el.infoSub.textContent = info.subtitle ?? "";
+      el.infoText.textContent = info.text;
+      el.infoText.hidden = !info.text;
+      el.infoNotes.replaceChildren(
+        ...info.notes.map((n) => {
+          const li = document.createElement("li");
+          li.textContent = n;
+          return li;
+        }),
+      );
+      el.info.hidden = false;
+      const w = el.info.offsetWidth;
+      const h = el.info.offsetHeight;
+      const gap = 28;
+      const top = insets.top + 6;
+      const bottom = window.innerHeight - insets.bottom - 6;
+      const x = at?.x ?? window.innerWidth / 2;
+      const y = at?.y ?? window.innerHeight / 2;
+      const left = Math.min(Math.max(8, x - w / 2), window.innerWidth - w - 8);
+      let ty = y - gap - h;
+      if (ty < top) ty = y + gap;
+      if (ty + h > bottom) ty = Math.max(top, bottom - h);
+      el.info.style.left = `${left}px`;
+      el.info.style.top = `${ty}px`;
+      if (hideAfterMs) infoTimer = setTimeout(() => (el.info.hidden = true), hideAfterMs);
+    },
+    get infoShown() {
+      return !el.info.hidden;
+    },
+
     toast(text) {
       el.toast.textContent = text;
       el.toast.classList.add("show");
@@ -439,6 +503,65 @@ export function createHud(root, opts) {
       toastTimer = setTimeout(() => el.toast.classList.remove("show"), 2200);
     },
   };
+}
+
+/** A small picture of what the info card describes, drawn like the map draws it. */
+export function infoIconSvg(icon) {
+  if (!icon) return "";
+  const svg = (body) => `<svg viewBox="0 0 28 28" width="28" height="28">${body}</svg>`;
+  const color = escapeHtml(icon.color ?? "#888");
+  const shape = (kind, fill, stroke) => {
+    const st = stroke ? `stroke="#fff" stroke-width="2" stroke-linejoin="round"` : "";
+    switch (kind) {
+      case "hub":
+        return `<rect x="5" y="5" width="18" height="18" rx="6" fill="${fill}" ${st}/>`;
+      case "square":
+        return `<rect x="6" y="6" width="16" height="16" fill="${fill}" ${st}/>`;
+      case "triangle":
+        return `<path d="M14 4 L24 22 L4 22 Z" fill="${fill}" ${st}/>`;
+      case "diamond":
+        return `<path d="M14 4 L24 14 L14 24 L4 14 Z" fill="${fill}" ${st}/>`;
+      case "edge":
+        return `<path d="M14 3 L23.5 8.5 L23.5 19.5 L14 25 L4.5 19.5 L4.5 8.5 Z" fill="${fill}" ${st}/>`;
+      case "cloud":
+        return `<path d="M7 20 A5 5 0 0 1 8 10 A7 7 0 0 1 20.5 10 A5 5 0 0 1 21 20 Z" fill="${fill}" ${st}/>`;
+      case "district":
+        return `<path d="M4 10 L14 4 L24 10 L24 21 Q24 24 21 24 L7 24 Q4 24 4 21 Z" fill="${fill}" ${st}/>`;
+      case "switch":
+        return (
+          `<rect x="6" y="6" width="16" height="16" rx="6" fill="${fill}" ${st}/>` +
+          [10, 18].flatMap((x) => [10, 18].map((y) => `<circle cx="${x}" cy="${y}" r="1.6" fill="#fff"/>`)).join("")
+        );
+      default:
+        return `<circle cx="14" cy="14" r="${stroke ? 9 : 7}" fill="${fill}" ${st}/>`;
+    }
+  };
+  switch (icon.type) {
+    case "site":
+      return svg(shape(icon.shape, color, true));
+    case "packet":
+      return svg(shape(icon.shape, color, false));
+    case "link": {
+      const width = 3 + (icon.tier ?? 0) * 1.5;
+      return svg(`<path d="M3 21 L11 13 L25 13" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    }
+    case "terrain": {
+      const fill = escapeHtml(icon.fill ?? "#bbb");
+      const edge = escapeHtml(icon.edge ?? "#888");
+      const marks = {
+        water: `<path d="M6 11 q2 -2 4 0 t4 0 t4 0 t4 0 M6 18 q2 -2 4 0 t4 0 t4 0 t4 0" fill="none" stroke="${edge}" stroke-width="1.5"/>`,
+        park: [9, 14, 19].flatMap((x) => [10, 18].map((y) => `<circle cx="${x}" cy="${y}" r="1.6" fill="${edge}"/>`)).join(""),
+        hills: `<path d="M5 13 L13 5 M5 21 L21 5 M11 23 L23 11" stroke="${edge}" stroke-width="1.5"/>`,
+      };
+      return svg(`<rect x="3" y="3" width="22" height="22" rx="4" fill="${fill}" stroke="${edge}" stroke-width="1.5"/>${marks[icon.terrain] ?? ""}`);
+    }
+    case "boundary":
+      return svg(`<path d="M4 24 C10 18 10 10 16 8 S22 5 25 4" fill="none" stroke="${icon.color ? color : "var(--muted)"}" stroke-width="7" stroke-linecap="round"/>`);
+    case "closed":
+      return svg(`<rect x="4" y="4" width="20" height="20" rx="3" fill="var(--muted)" opacity="0.35" stroke="var(--muted)" stroke-dasharray="3 3"/>`);
+    default:
+      return "";
+  }
 }
 
 function article(word) {

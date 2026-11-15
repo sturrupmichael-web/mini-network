@@ -14,6 +14,10 @@
  * - Equipment: drag an item from the tray onto its target (a link, a site,
  *   or empty map), or tap the item and then tap the target.
  * - Switches: tap a switch to select it; its × removes it.
+ * - Explain: a tap or click (no drag) on anything on the map calls
+ *   onInspect with what it was: a site, a link, a packet, terrain, a
+ *   carrier boundary or the closed part of the map (ui/inspect.js turns
+ *   that into a card). Any new press hides it (onInspect(null)).
  *
  * Fast swipes still work: the path steps one square at a time towards
  * wherever the pointer is now, so no squares are skipped.
@@ -21,7 +25,7 @@
 import { distanceToPolyline } from "../sim/geometry.js";
 import { cellCenter, cellKey, cellOf, inGrid, inView, isTerrain, sameCell, siteCells, stepToward } from "../sim/grid.js";
 import { screenToWorld, worldToScreen } from "../render/camera.js";
-import { removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemoveButtonPos } from "../render/renderer.js";
+import { packetAt, removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemoveButtonPos } from "../render/renderer.js";
 
 /**
  * @param {HTMLCanvasElement} canvas
@@ -36,9 +40,10 @@ import { removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemoveButtonPos 
  *                                    lineFor(siteId), removeSite(siteId), place(item, target) }
  * @param {object} opts.items        ITEMS from equipment.js (what each tray item targets).
  * @param {(reason: string) => void} [opts.onRefused]
+ * @param {(target: object | null, at: { x: number, y: number }) => void} [opts.onInspect]
  */
 export function attachPointerInput(canvas, opts) {
-  const { getWorld, getCamera, config, ui, canEdit, actions, onRefused, items } = opts;
+  const { getWorld, getCamera, config, ui, canEdit, actions, onRefused, onInspect, items } = opts;
   let press = null; // a press on a link: { pointerId, linkId, start, touch }
   let lastPointerType = "mouse"; // contextmenu isn't a PointerEvent everywhere
 
@@ -94,6 +99,34 @@ export function attachPointerInput(canvas, opts) {
     const site = ui.selectedSiteId && world.siteById.get(ui.selectedSiteId);
     if (site && near(siteRemoveButtonPos(world, site, camera))) return "site";
     return null;
+  }
+
+  /** A packet under p (fingers get a little more room), or null. */
+  function packetNear(p, touch) {
+    const packet = packetAt(getWorld(), getCamera(), p, touch ? config.touchPacketRadius : config.mousePacketRadius);
+    return packet ? { kind: "packet", id: packet.id } : null;
+  }
+
+  /** What's on empty map at p: a waiting packet, terrain, a carrier boundary, the closed area, or null. */
+  function placeAt(p, touch) {
+    const packet = packetNear(p, touch);
+    if (packet) return packet;
+    const world = getWorld();
+    const camera = getCamera();
+    const w = screenToWorld(camera, p.x, p.y);
+    if (!inView(world, w.x, w.y)) return { kind: "closed" };
+    const terrain = world.terrain?.get(cellKey(cellOf(world, w.x, w.y)));
+    if (terrain) return { kind: "terrain", terrain };
+    const radius = touch ? config.touchLinkRadius : config.mouseLinkRadius;
+    for (const line of world.map.boundaries ?? []) {
+      const pts = line.map(([x, y]) => worldToScreen(camera, x, y));
+      if (distanceToPolyline(p, pts) <= radius) return { kind: "boundary" };
+    }
+    return null;
+  }
+
+  function inspect(target, p) {
+    onInspect?.(target, p);
   }
 
   function clearSelection() {
@@ -246,6 +279,7 @@ export function attachPointerInput(canvas, opts) {
     if (!canEdit()) return;
     const p = local(e);
     const touch = isTouch(e);
+    inspect(null, p);
 
     if (ui.armed) {
       e.preventDefault();
@@ -298,6 +332,7 @@ export function attachPointerInput(canvas, opts) {
     }
 
     clearSelection();
+    inspect(placeAt(p, touch), p);
   }
 
   function onMove(e) {
@@ -360,10 +395,12 @@ export function attachPointerInput(canvas, opts) {
         }
         ui.reroute = null;
       } else if (e.type === "pointerup") {
-        // A tap: toggle selection.
+        // A tap: toggle selection, and explain what was tapped (a packet
+        // riding the link if there's one right there, or else the link).
         const was = ui.selectedLinkId === press.linkId;
         clearSelection();
         ui.selectedLinkId = was ? null : press.linkId;
+        inspect(packetNear(press.start, press.touch) ?? { kind: "link", id: press.linkId }, press.start);
       }
       press = null;
       return;
@@ -376,6 +413,14 @@ export function attachPointerInput(canvas, opts) {
     const site = world.siteById.get(drag.startSiteId);
     if (e.type === "pointerup" && !drag.moved && site && world.data.sites[site.type].junction) {
       ui.selectedSiteId = drag.wasSelected ? null : site.id;
+    }
+    // A tap (no drag) on any site explains it, or one of the packets
+    // waiting beside it if the tap was right on that and off the site itself.
+    if (e.type === "pointerup" && !drag.moved && site) {
+      const s = worldToScreen(getCamera(), site.x, site.y);
+      const offSite = Math.hypot(s.x - drag.start.x, s.y - drag.start.y) > siteRadiusPx(world, site, getCamera()) + 2;
+      const packet = offSite ? packetNear(drag.start, drag.touch) : null;
+      inspect(packet ?? { kind: "site", id: site.id }, drag.start);
     }
   }
 
