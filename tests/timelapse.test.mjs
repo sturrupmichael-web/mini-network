@@ -19,6 +19,12 @@ export const tests = [
     assert(frames >= 1, `${frames} frames`);
     const size = await page.locator('[data-hud="timelapse"]').evaluate((c) => ({ w: c.width, h: c.height }));
     assert(size.w > 0 && size.h > 0, "drawn");
+    // The run report: a bar per week, the busiest link and the site that ended it.
+    const weeks = await page.evaluate(() => Math.max(window.miniNetwork.world.week, window.miniNetwork.world.stats.weekly.length));
+    assert((await page.locator('[data-hud="week-chart"] .wk').count()) === weeks, "one bar per week");
+    const ended = await page.locator('[data-hud="ended-by"]').textContent();
+    assert(/down Week \d+/.test(ended), ended);
+    assert((await page.locator('[data-hud="busiest"]').textContent()).trim().length > 0, "busiest link shown");
     const download = page.waitForEvent("download");
     await page.click('[data-hud="save-image"]');
     assert((await download).suggestedFilename() === "nano-networks.png", "saves a png");

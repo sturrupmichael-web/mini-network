@@ -6,6 +6,7 @@ import { THEME } from "../../data/theme.js";
 import { pointAlong } from "../sim/geometry.js";
 import { cellCenter, cellOf, cellsToPath, gridSize, straightCells } from "../sim/grid.js";
 import { isBlocked } from "../sim/links.js";
+import { busiestLink } from "../sim/runstats.js";
 import { worldToScreen } from "./camera.js";
 
 /** Drawing sizes shrink a little on small screens and grow on big ones. */
@@ -91,6 +92,17 @@ export function render(ctx, view, world, camera, ui, now = 0) {
   if (world.over) {
     ctx.fillStyle = colors.dim;
     ctx.fillRect(0, 0, view.width, view.height);
+    // Lift the busiest link out of the dimming, with a halo (see the game-over card).
+    const top = busiestLink(world);
+    const busiest = top && top.linkId !== null && world.linkById.get(top.linkId);
+    if (busiest) {
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = colors.removeFill;
+      ctx.lineWidth = linkWidth(world, busiest, k) + 12 * k;
+      strokePath(ctx, toScreenPath(camera, busiest.path));
+      ctx.globalAlpha = 1;
+      drawLink(ctx, world, camera, colors, k, ui, now, busiest);
+    }
     const site = world.siteById.get(world.over.siteId);
     if (site) {
       drawOverload(ctx, world, camera, colors, site, k, now);
@@ -353,52 +365,54 @@ function linkWidth(world, link, k) {
 }
 
 function drawLinks(ctx, world, camera, colors, k, ui, now) {
-  for (const link of world.links) {
-    // Animate in real time, so links drawn while paused still finish drawing.
-    if (!firstSeen.has(link)) firstSeen.set(link, now);
-    const grow = (now - firstSeen.get(link)) / THEME.linkAppearSeconds;
-    const pts = toScreenPath(camera, grow >= 1 ? link.path : partialPath(link.path, link.length * Math.max(0.05, grow)));
-    const width = linkWidth(world, link, k);
-    const faded = ui.reroute?.linkId === link.id;
-    const selected = ui.selectedLinkId === link.id;
-    const blocked = isBlocked(world, link);
-    if (selected) {
-      ctx.strokeStyle = colors.highlight;
-      ctx.lineWidth = width + 12 * k;
-      strokePath(ctx, pts);
-    }
-    // A thin background-coloured outline keeps crossing lines readable.
-    ctx.strokeStyle = colors.background;
-    ctx.lineWidth = width + 3 * k;
+  for (const link of world.links) drawLink(ctx, world, camera, colors, k, ui, now, link);
+}
+
+function drawLink(ctx, world, camera, colors, k, ui, now, link) {
+  // Animate in real time, so links drawn while paused still finish drawing.
+  if (!firstSeen.has(link)) firstSeen.set(link, now);
+  const grow = (now - firstSeen.get(link)) / THEME.linkAppearSeconds;
+  const pts = toScreenPath(camera, grow >= 1 ? link.path : partialPath(link.path, link.length * Math.max(0.05, grow)));
+  const width = linkWidth(world, link, k);
+  const faded = ui.reroute?.linkId === link.id;
+  const selected = ui.selectedLinkId === link.id;
+  const blocked = isBlocked(world, link);
+  if (selected) {
+    ctx.strokeStyle = colors.highlight;
+    ctx.lineWidth = width + 12 * k;
     strokePath(ctx, pts);
-    ctx.globalAlpha = faded ? 0.3 : link.down || blocked ? 0.45 : 1;
-    ctx.strokeStyle = lineColor(link.line);
-    ctx.lineWidth = width;
-    if (link.down || blocked) ctx.setLineDash([width * 1.4, width * 1.2]);
+  }
+  // A thin background-coloured outline keeps crossing lines readable.
+  ctx.strokeStyle = colors.background;
+  ctx.lineWidth = width + 3 * k;
+  strokePath(ctx, pts);
+  ctx.globalAlpha = faded ? 0.3 : link.down || blocked ? 0.45 : 1;
+  ctx.strokeStyle = lineColor(link.line);
+  ctx.lineWidth = width;
+  if (link.down || blocked) ctx.setLineDash([width * 1.4, width * 1.2]);
+  strokePath(ctx, pts);
+  ctx.setLineDash([]);
+  if (link.backbone) {
+    // Backbones look like an express road: a dashed centre line.
+    ctx.strokeStyle = colors.leasedStripe;
+    ctx.lineWidth = Math.max(1.4, width * 0.16);
+    ctx.setLineDash([width * 0.9, width * 0.7]);
     strokePath(ctx, pts);
     ctx.setLineDash([]);
-    if (link.backbone) {
-      // Backbones look like an express road: a dashed centre line.
-      ctx.strokeStyle = colors.leasedStripe;
-      ctx.lineWidth = Math.max(1.4, width * 0.16);
-      ctx.setLineDash([width * 0.9, width * 0.7]);
-      strokePath(ctx, pts);
-      ctx.setLineDash([]);
-    } else if (link.leased) {
-      // Leased lines get a double-rail look.
-      ctx.strokeStyle = colors.leasedStripe;
-      ctx.lineWidth = Math.max(1.2, width * 0.28);
-      strokePath(ctx, pts);
-    }
-    ctx.globalAlpha = 1;
-    const mid = worldToScreen(camera, ...xy(pointAlong(link.path, link.length / 2)));
-    if (link.firewall) {
-      const p = worldToScreen(camera, ...xy(pointAlong(link.path, link.length * 0.3)));
-      drawFirewall(ctx, colors, p.x, p.y, k);
-    }
-    if (link.down) drawBadge(ctx, mid.x, mid.y, 7 * k, colors.down, "×");
-    else if (blocked) drawBadge(ctx, mid.x, mid.y, 7 * k, colors.blocked, "!");
+  } else if (link.leased) {
+    // Leased lines get a double-rail look.
+    ctx.strokeStyle = colors.leasedStripe;
+    ctx.lineWidth = Math.max(1.2, width * 0.28);
+    strokePath(ctx, pts);
   }
+  ctx.globalAlpha = 1;
+  const mid = worldToScreen(camera, ...xy(pointAlong(link.path, link.length / 2)));
+  if (link.firewall) {
+    const p = worldToScreen(camera, ...xy(pointAlong(link.path, link.length * 0.3)));
+    drawFirewall(ctx, colors, p.x, p.y, k);
+  }
+  if (link.down) drawBadge(ctx, mid.x, mid.y, 7 * k, colors.down, "×");
+  else if (blocked) drawBadge(ctx, mid.x, mid.y, 7 * k, colors.blocked, "!");
 }
 
 const xy = (p) => [p.x, p.y];

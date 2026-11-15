@@ -12,8 +12,11 @@ const HOLD_SECONDS = 2;
  * @param {HTMLCanvasElement} canvas
  * @param {object[]} frames
  * @param {object} siteTypes  SITE_TYPES (for colours and sizes)
+ * @param {{ link?: { a: number, b: number } | null, siteId?: number }} [marks]
+ *   The busiest link (outlined whenever it's there) and the site that
+ *   ended the run (ringed on the last frame).
  */
-export function playTimelapse(canvas, frames, siteTypes) {
+export function playTimelapse(canvas, frames, siteTypes, marks = {}) {
   let raf = 0;
   if (frames.length === 0) return () => {};
   const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -23,7 +26,7 @@ export function playTimelapse(canvas, frames, siteTypes) {
     // rAF's timestamp is when the frame began, which can be a moment before `start`.
     const t = (Math.max(0, now - start) / 1000) % total;
     const index = reduced ? frames.length - 1 : Math.min(frames.length - 1, Math.floor(t / FRAME_SECONDS));
-    drawFrame(canvas, frames, index, siteTypes);
+    drawFrame(canvas, frames, index, siteTypes, marks);
     if (!reduced) raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);
@@ -49,7 +52,7 @@ function bounds(frames) {
 }
 
 /** Draw frame `index` to fill the canvas (also used for the saved image). */
-export function drawFrame(canvas, frames, index, siteTypes) {
+export function drawFrame(canvas, frames, index, siteTypes, marks = {}) {
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || 320;
   const cssH = canvas.clientHeight || 180;
@@ -74,6 +77,18 @@ export function drawFrame(canvas, frames, index, siteTypes) {
 
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  const ink = style.getPropertyValue("--ink").trim() || "#2b2b2b";
+  const busiest = marks.link && frame.links.find((l) => (l.a === marks.link.a && l.b === marks.link.b) || (l.a === marks.link.b && l.b === marks.link.a));
+  if (busiest) {
+    // A soft halo under the busiest link.
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = (busiest.backbone ? 5 : 3.2) * k + 7;
+    ctx.beginPath();
+    busiest.path.forEach((p, i) => ctx[i === 0 ? "moveTo" : "lineTo"](ox + p.x * scale, oy + p.y * scale));
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   for (const link of frame.links) {
     ctx.strokeStyle = THEME.lineColors[link.line % THEME.lineColors.length];
     ctx.lineWidth = (link.backbone ? 5 : 3.2) * k;
@@ -93,6 +108,16 @@ export function drawFrame(canvas, frames, index, siteTypes) {
     ctx.lineWidth = 1.5 * k;
     ctx.stroke();
   }
+  const ended = index === frames.length - 1 && marks.siteId !== undefined && frame.sites.find((s) => s.id === marks.siteId);
+  if (ended) {
+    const def = siteTypes[ended.type];
+    const r = 5.5 * def.size * (ended.grown ? 1.3 : 1) * k;
+    ctx.beginPath();
+    ctx.arc(ox + ended.x * scale, oy + ended.y * scale, r + 5, 0, Math.PI * 2);
+    ctx.strokeStyle = THEME.light.overload;
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+  }
   // Day counter in the corner.
   ctx.fillStyle = style.getPropertyValue("--muted").trim() || "#888";
   ctx.font = `600 11px ${style.getPropertyValue("--font").trim() || "system-ui, sans-serif"}`;
@@ -102,8 +127,8 @@ export function drawFrame(canvas, frames, index, siteTypes) {
 }
 
 /** Download the final frame as a PNG. */
-export function saveImage(canvas, frames, siteTypes, filename = "nano-networks.png") {
-  drawFrame(canvas, frames, frames.length - 1, siteTypes);
+export function saveImage(canvas, frames, siteTypes, marks = {}, filename = "nano-networks.png") {
+  drawFrame(canvas, frames, frames.length - 1, siteTypes, marks);
   const a = document.createElement("a");
   a.href = canvas.toDataURL("image/png");
   a.download = filename;

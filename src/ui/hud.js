@@ -5,6 +5,7 @@
  */
 import { isStarving } from "../sim/sites.js";
 import { playTimelapse, saveImage } from "./timelapse.js";
+import { busiestHtml, endedHtml, runReport, weekChartHtml } from "./report.js";
 import { clock } from "../sim/progression.js";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -135,6 +136,17 @@ export function createHud(root, opts) {
           <canvas class="timelapse-canvas" data-hud="timelapse" role="img" aria-label="Your network growing, day by day"></canvas>
           <button type="button" class="link-btn" data-hud="save-image">Save image</button>
         </div>
+        <section class="report" aria-label="Run report">
+          <div class="report-head">
+            <h3 class="report-heading">Packets delivered each week</h3>
+            <p class="report-note" data-hud="week-note"></p>
+          </div>
+          <div class="week-chart" role="list" data-hud="week-chart"></div>
+          <dl class="report-facts">
+            <div class="fact"><dt>Busiest link</dt><dd data-hud="busiest"></dd></div>
+            <div class="fact" data-hud="ended-box"><dt>Ended the run</dt><dd data-hud="ended-by"></dd></div>
+          </dl>
+        </section>
         <div class="share" data-hud="share" hidden>
           <pre class="share-text" data-hud="share-text"></pre>
           <button type="button" class="secondary-btn" data-hud="share-btn">Copy result</button>
@@ -177,6 +189,11 @@ export function createHud(root, opts) {
     overSeed: q("over-seed"),
     timelapseBox: q("timelapse-box"),
     timelapse: q("timelapse"),
+    weekChart: q("week-chart"),
+    weekNote: q("week-note"),
+    busiest: q("busiest"),
+    endedBox: q("ended-box"),
+    endedBy: q("ended-by"),
     saveImage: q("save-image"),
     overMenu: q("over-menu"),
     sameSeed: q("same-seed"),
@@ -412,11 +429,21 @@ export function createHud(root, opts) {
         stopTimelapse();
         if (world.over) {
           const frames = world.history;
+          const report = runReport(world);
+          // The timelapse outlines the busiest link and rings the site that went down.
+          const marks = { link: report.busiest, siteId: world.over.siteId };
           el.timelapseBox.hidden = frames.length === 0;
           if (frames.length > 0) {
-            stopTimelapse = playTimelapse(el.timelapse, frames, world.data.sites);
-            el.saveImage.onclick = () => saveImage(el.timelapse, frames, world.data.sites);
+            stopTimelapse = playTimelapse(el.timelapse, frames, world.data.sites, marks);
+            el.saveImage.onclick = () => saveImage(el.timelapse, frames, world.data.sites, marks);
           }
+          el.weekChart.innerHTML = weekChartHtml(report.weeks);
+          // The last bar is lighter: the outage cut that week short.
+          el.weekNote.hidden = report.weeks.length < 2;
+          el.weekNote.textContent = `Week ${report.weeks.length} cut short`;
+          el.busiest.innerHTML = busiestHtml(report.busiest);
+          el.endedBox.hidden = !report.ended;
+          el.endedBy.innerHTML = endedHtml(report.ended, world.data.sites);
           const site = world.siteById.get(world.over.siteId);
           const name = world.data.sites[site.type].name;
           el.overTitle.textContent = `${article(name)} ${name.toLowerCase()} went down`;

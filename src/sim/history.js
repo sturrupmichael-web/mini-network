@@ -8,7 +8,7 @@
 export function recordFrame(world) {
   world.history.push({
     day: world.day,
-    sites: world.sites.map((s) => ({ x: s.x, y: s.y, type: s.type, grown: s.grown })),
-    links: world.links.map((l) => ({ line: l.line, backbone: l.backbone, path: l.path.map((p) => ({ x: p.x, y: p.y })) })),
+    sites: world.sites.map((s) => ({ id: s.id, x: s.x, y: s.y, type: s.type, grown: s.grown })),
+    links: world.links.map((l) => ({ a: l.a, b: l.b, line: l.line, backbone: l.backbone, path: l.path.map((p) => ({ x: p.x, y: p.y })) })),
   });
 }
