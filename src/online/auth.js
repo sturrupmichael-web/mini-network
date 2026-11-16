@@ -8,9 +8,17 @@
  *   rest()    calls the REST API as the signed-in player, refreshing the
  *             session first when it is about to expire.
  *
- * The session is kept in storage under "auth". Everything takes its fetch,
- * location and storage from the caller so the tests can stand in for them.
+ * The session lives in localStorage under SITE_KEY, the one Google sign-in
+ * shared by every game on michaelsturrup.com (and the main page's "Sign in
+ * with Google" button), so signing in anywhere on the site signs in here too.
+ * It is read fresh before each use because another page may have refreshed it
+ * (Supabase hands out a new refresh token each time and the old one stops
+ * working). See docs/site-sign-in.md in the sturrupmichael-web.github.io repo.
+ *
+ * Everything takes its fetch, location and storage from the caller so the
+ * tests can stand in for them.
  */
+export const SITE_KEY = "michaelsturrup.auth.v1";
 export const ONLINE = {
   url: "https://abeqdmurddrkrqbnfylb.supabase.co",
   key: "sb_publishable_8WUpbX-clRvdKgset72mkQ_C_NFL5E8",
@@ -27,31 +35,92 @@ export function parseSession(raw) {
       access_token: access,
       refresh_token: String(raw.refresh_token ?? ""),
       expires_at: Number(raw.expires_at) || payload.exp,
-      user: { id: payload.sub, email: payload.email ?? "" },
+      user: { id: payload.sub, email: payload.email ?? "", guest: false },
     };
   } catch {
     return null;
   }
 }
 
+function defaultSite() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The shared session slot. Falls back to memory when storage is blocked, so
+ * sign-in still lasts for this page.
+ */
+function siteSlot(backend) {
+  let memory = null;
+  const valid = (s) => (s && s.user?.id && s.access_token && !s.user.guest ? s : null);
+  return {
+    get() {
+      try {
+        const raw = backend?.getItem(SITE_KEY);
+        if (raw !== null && raw !== undefined) return valid(JSON.parse(raw));
+        if (backend) return null;
+      } catch {
+        // Unreadable or blocked: use memory.
+      }
+      return memory;
+    },
+    set(s) {
+      memory = s;
+      try {
+        if (!backend) return;
+        if (s) backend.setItem(SITE_KEY, JSON.stringify(s));
+        else backend.removeItem(SITE_KEY);
+      } catch {
+        // Blocked: memory only.
+      }
+    },
+  };
+}
+
 /**
  * @param {object} opts
- * @param {object} opts.storage     createStorage() instance
+ * @param {object} opts.storage     createStorage() instance (the game's own saves)
+ * @param {Storage} [opts.site]     where the shared session lives; localStorage by default
  * @param {typeof fetch} [opts.fetch]
  * @param {Location} [opts.location]
  * @param {History} [opts.history]
  * @param {object} [opts.config]    ONLINE by default
  */
-export function createAuth({ storage, fetch: doFetch = globalThis.fetch?.bind(globalThis), location = globalThis.location, history = globalThis.history, config = ONLINE }) {
-  let session = storage.get("auth", null);
-  if (session && !session.user?.id) session = null;
+export function createAuth({ storage, site = defaultSite(), fetch: doFetch = globalThis.fetch?.bind(globalThis), location = globalThis.location, history = globalThis.history, config = ONLINE }) {
+  const slot = siteSlot(site);
   const listeners = new Set();
+  const current = () => slot.get();
+
+  // Before the site-wide sign-in the game kept its own copy under "auth".
+  // Move it into the shared slot unless someone is already signed in there.
+  const own = storage.get("auth", null);
+  if (own) {
+    if (!current() && own.user?.id) slot.set({ ...own, user: { ...own.user, guest: false } });
+    storage.remove("auth");
+  }
+
+  let lastId = current()?.user?.id ?? null;
+  function announce() {
+    const user = current()?.user ?? null;
+    if ((user?.id ?? null) === lastId) return;
+    lastId = user?.id ?? null;
+    for (const fn of listeners) fn(user);
+  }
 
   function save(next) {
-    session = next;
-    if (next) storage.set("auth", next);
-    else storage.remove("auth");
-    for (const fn of listeners) fn(session?.user ?? null);
+    slot.set(next);
+    announce();
+  }
+
+  // Signed in or out on another page of the site (another tab): follow along.
+  if (site && site === defaultSite()) {
+    globalThis.addEventListener?.("storage", (e) => {
+      if (e.key === SITE_KEY || e.key === null) announce();
+    });
   }
 
   /** fetch with the API key, a timeout, and a parsed JSON body. Never throws. */
@@ -84,7 +153,7 @@ export function createAuth({ storage, fetch: doFetch = globalThis.fetch?.bind(gl
   const auth = {
     lastError: "",
     get user() {
-      return session?.user ?? null;
+      return current()?.user ?? null;
     },
     /**
      * Sign-in needs a real top-level page: Google refuses to show inside a
@@ -128,6 +197,7 @@ export function createAuth({ storage, fetch: doFetch = globalThis.fetch?.bind(gl
     },
     /** True if there's a session that's good for at least another minute. */
     async ensure() {
+      const session = current();
       if (!session) return false;
       if (session.expires_at - 60 > Date.now() / 1000) return true;
       const r = await call(`${config.url}/auth/v1/token?grant_type=refresh_token`, {
@@ -139,8 +209,12 @@ export function createAuth({ storage, fetch: doFetch = globalThis.fetch?.bind(gl
         save(next);
         return true;
       }
-      // Offline: keep the session for later. Refused: it's gone, sign out.
-      if (r.status !== 0) save(null);
+      // Offline: keep the session for later.
+      if (r.status === 0) return false;
+      // Refused. Another page may have refreshed it a moment ago: use theirs.
+      const now = current();
+      if (now && now.refresh_token !== session.refresh_token) return now.expires_at - 60 > Date.now() / 1000;
+      save(null);
       return false;
     },
     /** A REST call as the signed-in player (401 if not signed in). */
@@ -148,18 +222,20 @@ export function createAuth({ storage, fetch: doFetch = globalThis.fetch?.bind(gl
       if (!(await auth.ensure())) return { ok: false, status: 401 };
       return call(`${config.url}/rest/v1/${path}`, {
         ...init,
-        headers: { Authorization: `Bearer ${session.access_token}`, ...init.headers },
+        headers: { Authorization: `Bearer ${current().access_token}`, ...init.headers },
       });
     },
     /** A REST call that doesn't need anyone signed in (uses the session if there is one). */
     async publicRest(path, init = {}) {
-      if (session && (await auth.ensure())) return auth.rest(path, init);
+      if (current() && (await auth.ensure())) return auth.rest(path, init);
       return call(`${config.url}/rest/v1/${path}`, init);
     },
     signIn() {
       location.assign(`${config.url}/auth/v1/authorize?${new URLSearchParams({ provider: "google", redirect_to: here() })}`);
     },
+    /** Signs out everywhere on the site: the session is shared. */
     signOut() {
+      const session = current();
       if (session) {
         call(`${config.url}/auth/v1/logout`, { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` } });
       }
