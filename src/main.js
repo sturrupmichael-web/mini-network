@@ -28,6 +28,7 @@ const game = startGame({
   canvas: document.getElementById("game"),
   hudRoot: document.getElementById("hud"),
   titleRoot: document.getElementById("title"),
+  onlineRoot: document.getElementById("online"),
   randomSeed,
   autostart: urlSeed ? { seed: urlSeed, mapId: params.get("map") ?? undefined, modeId: params.get("mode") ?? "classic" } : null,
   // ?debug opens the tuning panel (the ` key toggles it too).

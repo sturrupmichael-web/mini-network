@@ -141,6 +141,7 @@ export function createHud(root, opts) {
           <div><dt>Survived</dt><dd data-hud="over-days">0 days</dd></div>
         </dl>
         <p class="card-best" data-hud="over-best"></p>
+        <div class="over-online" data-hud="over-online" hidden></div>
         <div class="timelapse" data-hud="timelapse-box" hidden>
           <canvas class="timelapse-canvas" data-hud="timelapse" role="img" aria-label="Your network growing, day by day"></canvas>
           <button type="button" class="link-btn" data-hud="save-image">Save image</button>
@@ -529,6 +530,10 @@ export function createHud(root, opts) {
       el.info.style.left = `${left}px`;
       el.info.style.top = `${ty}px`;
       if (hideAfterMs) infoTimer = setTimeout(() => (el.info.hidden = true), hideAfterMs);
+    },
+    /** The game-over card's leaderboard line (filled in by the online UI). */
+    get overOnlineSlot() {
+      return root.querySelector('[data-hud="over-online"]');
     },
     get infoShown() {
       return !el.info.hidden;

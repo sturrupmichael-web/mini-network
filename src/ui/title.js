@@ -16,9 +16,10 @@ const esc = (s) =>
  * @param {() => void} opts.onResume
  * @param {(change: object) => void} opts.onSettings  { muted?, theme? }
  * @param {() => object} opts.getSettings
+ * @param {() => void} [opts.onBoard]  Open the leaderboards.
  */
 export function createTitle(root, opts) {
-  const { modes, maps, dailyMapId, best, onPlay, onResume, onSettings, getSettings } = opts;
+  const { modes, maps, dailyMapId, best, onPlay, onResume, onSettings, getSettings, onBoard = () => {} } = opts;
   let modeId = "classic";
   let mapId = maps[0].id;
 
@@ -47,8 +48,12 @@ export function createTitle(root, opts) {
           <button type="button" class="primary-btn" data-title="play">Play</button>
           <button type="button" class="secondary-btn" data-title="resume" hidden>Resume</button>
         </div>
+        <div class="title-account" data-title="account"></div>
         <p class="title-howto">Drag from site to site to link them. Drop gear from the tray onto links and sites. Keep every queue short.</p>
-        <button type="button" class="text-btn" data-title="open-settings">Settings</button>
+        <p class="title-links">
+          <button type="button" class="text-btn" data-title="open-board">Leaderboards</button>
+          <button type="button" class="text-btn" data-title="open-settings">Settings</button>
+        </p>
       </div>
     </div>
     <div class="overlay" data-title="settings" hidden>
@@ -128,6 +133,7 @@ export function createTitle(root, opts) {
     onPlay({ modeId, mapId: mode.daily ? dailyMapId(modeId) : mapId });
   });
   q('[data-title="resume"]').addEventListener("click", () => onResume());
+  q('[data-title="open-board"]').addEventListener("click", () => onBoard());
   q('[data-title="open-settings"]').addEventListener("click", () => {
     settingsCard.hidden = false;
     refresh();
@@ -167,6 +173,10 @@ export function createTitle(root, opts) {
     /** The map currently picked (for the background preview). */
     get mapId() {
       return modes[modeId].daily ? dailyMapId(modeId) : mapId;
+    },
+    /** The account line (filled in by the online UI). */
+    get accountSlot() {
+      return q('[data-title="account"]');
     },
     showSettings() {
       settingsCard.hidden = false;
