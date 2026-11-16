@@ -1002,9 +1002,43 @@ function travellingPacketSpots(world, camera) {
     const b = worldToScreen(camera, ...xy(pointAlong(link.path, dist + 1)));
     const s = worldToScreen(camera, p.x, p.y);
     const { w, h } = packetSize(world, packet, P);
-    out.push({ packet, x: s.x, y: s.y, r: w / 2, w, h, angle: Math.atan2(b.y - a.y, b.x - a.x), scale: 1 });
+    const spot = { packet, x: s.x, y: s.y, r: w / 2, w, h, angle: Math.atan2(b.y - a.y, b.x - a.x), scale: 1 };
+    // Inside a switch, go round the ring instead of across the island.
+    roundabout(world, camera, link, dist, packet.dir, spot);
+    out.push(spot);
   }
   return out;
+}
+
+/** Packets go round a switch's ring anticlockwise, a quarter turn in and a quarter turn out. */
+const RING_SWEEP = Math.PI / 2;
+function roundabout(world, camera, link, dist, dir, spot) {
+  for (const [end, fromEnd, arriving] of [
+    [link.a, dist, dir === 1],
+    [link.b, link.length - dist, dir === 0],
+  ]) {
+    const site = world.siteById.get(end);
+    if (!site || siteForm(world.data.sites[site.type]) !== "switch") continue;
+    const box = siteBox(world, site, camera);
+    const c = worldToScreen(camera, site.x, site.y);
+    const R = box.w / 2;
+    const d = Math.hypot(spot.x - c.x, spot.y - c.y);
+    if (d >= R) continue;
+    // Where the link meets the ring.
+    const edgeDist = Math.min(link.length, R / camera.scale);
+    const e = pointAlong(link.path, end === link.a ? edgeDist : link.length - edgeDist);
+    const es = worldToScreen(camera, e.x, e.y);
+    const theta = Math.atan2(es.y - c.y, es.x - c.x);
+    const ring = Math.max(3, SIZE.cable * tilePx(world, camera) * (site.core ? 1.5 : 1));
+    const rc = R - ring / 2;
+    const f = Math.min(1, Math.max(0, fromEnd * camera.scale / R));
+    // Anticlockwise on screen is a falling angle.
+    const phi = arriving ? theta - (1 - f) * RING_SWEEP : theta + (1 - f) * RING_SWEEP;
+    spot.x = c.x + Math.cos(phi) * rc;
+    spot.y = c.y + Math.sin(phi) * rc;
+    spot.angle = phi - Math.PI / 2;
+    return;
+  }
 }
 
 const xy = (p) => [p.x, p.y];
