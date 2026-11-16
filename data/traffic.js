@@ -3,8 +3,14 @@
  *
  * Fields:
  *   name       Display name.
- *   color      Packet colour (any CSS colour).
- *   shape      Packet shape: "circle" | "square" | "triangle" | "diamond".
+ *   color      Packet colour (any CSS colour), used where the theme's
+ *              colour isn't known.
+ *   node       Optional gameplay colour name from theme.js NODE; the map
+ *              draws the packet in it for the current theme. It matches
+ *              the site it is headed for where that has a colour (web →
+ *              internet edge, ERP → logistics hub, …).
+ *   shape      Its shape on info-card icons: "circle" | "square" |
+ *              "triangle" | "diamond". On the map every packet is a pill.
  *   size       Bandwidth used: a size-2 packet keeps a link busy twice as
  *              long as a size-1 packet. Also scales how big it is drawn.
  *   to         Where it goes. One of:
@@ -29,7 +35,8 @@
 export const TRAFFIC_TYPES = {
   email: {
     name: "Email & files",
-    color: "#2f80ed",
+    color: "#3E8ED0",
+    node: "blue",
     shape: "circle",
     size: 1,
     to: "datacenter",
@@ -40,7 +47,8 @@ export const TRAFFIC_TYPES = {
   },
   erp: {
     name: "ERP",
-    color: "#f2994a",
+    color: "#F2B33D",
+    node: "yellow",
     shape: "square",
     size: 1,
     to: ["datacenter", "logistics"],
@@ -50,7 +58,8 @@ export const TRAFFIC_TYPES = {
   },
   payments: {
     name: "Payments",
-    color: "#27ae60",
+    color: "#4FAE6A",
+    node: "green",
     shape: "triangle",
     size: 0.6,
     to: ["datacenter", "payhub"],
@@ -63,7 +72,8 @@ export const TRAFFIC_TYPES = {
   },
   voip: {
     name: "VoIP",
-    color: "#13a8b5",
+    color: "#8E6CC8",
+    node: "purple",
     shape: "triangle",
     size: 0.5,
     to: "datacenter",
@@ -76,7 +86,8 @@ export const TRAFFIC_TYPES = {
   },
   video: {
     name: "Video",
-    color: "#9b51e0",
+    color: "#2FAFA6",
+    node: "teal",
     shape: "diamond",
     size: 2,
     to: "datacenter",
@@ -87,7 +98,8 @@ export const TRAFFIC_TYPES = {
   },
   web: {
     name: "Web & SaaS",
-    color: "#e0569b",
+    color: "#E2574C",
+    node: "red",
     shape: "circle",
     size: 1,
     to: "edge",
@@ -97,7 +109,8 @@ export const TRAFFIC_TYPES = {
   },
   backup: {
     name: "Backups",
-    color: "#4f4f4f",
+    color: "#EE8A3C",
+    node: "orange",
     shape: "square",
     size: 3,
     to: ["datacenter", "cloud"],
@@ -107,7 +120,8 @@ export const TRAFFIC_TYPES = {
   },
   patch: {
     name: "Patches",
-    color: "#56ccf2",
+    color: "#E77FA8",
+    node: "pink",
     shape: "diamond",
     size: 1.5,
     to: "site",
@@ -117,7 +131,8 @@ export const TRAFFIC_TYPES = {
   },
   allhands: {
     name: "All-hands stream",
-    color: "#bb6bd9",
+    color: "#E77FA8",
+    node: "pink",
     shape: "diamond",
     size: 2,
     to: "site",
@@ -127,7 +142,7 @@ export const TRAFFIC_TYPES = {
   },
   junk: {
     name: "Junk (DDoS)",
-    color: "#b5b0a6",
+    color: "#A8A196",
     shape: "circle",
     size: 0.8,
     to: "datacenter",

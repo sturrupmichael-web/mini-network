@@ -190,16 +190,18 @@ land between ticks.
   `mode:map` or `daily:date`.
 - **Settings** stored under `settings`: `{ speed, muted, theme }`. Theme is
   `system`, `light` or `dark`; it sets `data-theme` on `<html>` (CSS
-  variables) and `ui.theme` (canvas palette from `THEME.light` /
-  `THEME.dark`).
+  variables) and `ui.theme` (canvas palette from `mapColors(theme, map.palette)`
+  in `data/theme.js`).
 - **Audio** (`audio/audio.js`, `data/audio.js`): all sound is generated with
   Web Audio, no files. Each delivery plays a note of a pentatonic scale
   picked by traffic type, snapped to a beat (`createBeatQueue`) and capped
   per beat. Cues play for new sites, events, rewards and game over. Audio
   starts on the first tap (browser rule) and respects the mute setting.
-- **Animation**: sites scale in, links draw along their path over
-  `theme.linkAppearSeconds` of real time, and deliveries pop. These are
-  render-only (real time, not game ticks), so they never affect the sim.
+- **Animation** (`MOTION` in `data/theme.js`): sites scale in with a small
+  overshoot, links snap in tile by tile and removed links shrink to their
+  midpoint, delivered packets shrink into the site, ticket pins pop in, and
+  a ring timer pulses once it is 75% full. These are render-only (real time,
+  not game ticks), so they never affect the sim.
 - **URL parameters**: `?seed=` skips the title and starts that seed; add
   `&map=campus` and/or `&mode=zen` to pick the map or mode.
 
@@ -211,9 +213,22 @@ land between ticks.
   running world (`world.config = { ...config, links: { ...links, bandwidth } }`)
   because sections can be shared with `data/config.js`; a new game starts
   from the data again.
-- **Site colours**: each site type has a `color` in `data/sites.js`; every
-  site is drawn filled with it, with a white outline and a soft shadow
-  (`THEME.*.siteOutline`, `siteShadow`).
+- **Look** (see `docs/style-guide.md`): flat, rounded pieces with no
+  outlines, depth only from soft drop shadows in five tiers
+  (`SHADOW.tier`), and colour only for gameplay. Sites and traffic name a
+  colour from the guide's node palette (`node` in `data/sites.js` and
+  `data/traffic.js`, day/night values in `NODE`); a site shares its colour
+  with the traffic headed for it, and the data center, switches, links and
+  all UI chrome are neutral. Senders are drawn as workstations (rounded
+  squares with a "monitor"), destinations as servers (rack stripes),
+  switches as roundabouts; packets are pills, hunger is ticket pins.
+  Each map picks a ground palette (`palette` in `data/maps.js`); the dark
+  theme uses the night palette everywhere.
+- **Rendering performance**: the ground, zones and grid dots are drawn to a
+  cached layer, and the cables (with their blurred shadows) to another;
+  each is redrawn only when its key (camera, theme, links and their state)
+  changes. Sites are drawn from sprites with the shadow baked in. Packets,
+  pins and rings are drawn every frame with cheap unblurred shadows.
 - **Tray tooltips**: each item in `data/equipment.js` has a `tip`. The HUD
   shows it on mouse hover (listening on the tray, since disabled buttons get
   no pointer events), on keyboard focus, and for 2.5 s after a touch press,
@@ -262,10 +277,11 @@ It avoids going straight back where it came from unless that's the only way.
   Map from cell key to kind, built once in `createWorld`). Links can't
   cross those squares, switches can't go on them, and new sites keep a
   square away. The validator checks starting sites are clear.
-- **Drawing terrain**: each kind has a fill, a darker outline traced in
-  world space (so it's right when the camera is turned), and a texture
-  (`pattern` in `data/terrain.js`: waves, dots or hatch, coloured by
-  `theme.terrain.<kind>.hatch`). When a drag bumps into terrain,
+- **Drawing terrain**: each kind is a flat, soft-edged blob in its own
+  palette colour (water the "security zone", hills the "wall/floor zone",
+  parks a green tint): outside corners are rounded and inside corners
+  filled, drawn in world space (so it's right when the camera is turned).
+  When a drag bumps into terrain,
   `pointer.js` sets `ui.blockedCell` and the renderer flashes that square.
 - **The open area** (`world.view`, `sim/view.js`): starts at
   `growth.viewStart` of the map around HQ and grows by `growth.viewPerSite`
@@ -298,7 +314,8 @@ clear, else a breadth-first search around sites.
 
 Each direction has its own bandwidth: after sending a packet of size `s`,
 that direction is busy for `s / bandwidth` seconds. Each drag gesture gets
-the next line colour.
+the next line number (`link.line`); links are all drawn in the neutral
+cable colour, so it no longer shows.
 
 ## Config schema (data/)
 
@@ -332,7 +349,8 @@ logs a warning.
 
 `dev.html` loads `src/main.js` and `styles/main.css` directly.
 `npm run build` (`build.mjs`) bundles and minifies with esbuild, inlines the
-JS and CSS into `index.html`, writes a CSP with the scripts' sha256 hashes,
+JS and CSS into `index.html` (the DM Sans font in `styles/fonts`, SIL Open
+Font License, goes in as a data: URL), writes a CSP with the scripts' sha256 hashes,
 and fails if any `src`/`href` in `dev.html` still points at a file.
 
 ## Tests

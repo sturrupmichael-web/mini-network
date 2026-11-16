@@ -3,7 +3,7 @@
  * each week, the busiest link, and the site that ended the run.
  * Builds HTML strings from world data; hud.js puts them in place.
  */
-import { THEME } from "../../data/theme.js";
+import { NODE } from "../../data/theme.js";
 import { busiestLink, weeklyDeliveries } from "../sim/runstats.js";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -75,23 +75,26 @@ export function weekChartHtml(weeks, inProgress = true) {
     .join("");
 }
 
-/** A short line swatch in the link's colour, with the same halo as on the map. */
+/** A short cable swatch, with the same halo as on the map. */
 function linkSwatch(line) {
-  const color = line === null ? "var(--muted)" : THEME.lineColors[line % THEME.lineColors.length];
+  const color = line === null ? "var(--muted)" : "#8F9AA6";
   return `<svg class="fact-icon" viewBox="0 0 28 28" aria-hidden="true">
-    <path d="M4 20 L12 12 L24 12" fill="none" stroke="var(--ink)" stroke-opacity="0.22" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M4 20 L12 12 L24 12" fill="none" stroke="var(--ink)" stroke-opacity="0.16" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M4 20 L12 12 L24 12" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"${line === null ? ' stroke-dasharray="3 4"' : ""}/>
   </svg>`;
 }
 
-/** The site's shape in its colour, inside the red outage ring. */
+/** The site as the map draws it, inside a full ring timer in its colour. */
 function siteSwatch(def) {
-  const shape =
-    def.shape === "circle"
-      ? `<circle cx="14" cy="14" r="6.5" fill="${def.color}" stroke="#fff" stroke-width="1.6"/>`
-      : `<rect x="7.5" y="7.5" width="13" height="13" rx="3" fill="${def.color}" stroke="#fff" stroke-width="1.6"/>`;
+  const color = def.node ? NODE.day[def.node] : def.junction ? "#9AA6B2" : "#4A5560";
+  const server = def.shape === "hub" || def.shape === "cloud" || def.shape === "edge" || def.shape === "district";
+  const shape = def.junction
+    ? `<circle cx="14" cy="14" r="6" fill="none" stroke="${color}" stroke-width="3"/>`
+    : server
+      ? `<rect x="7" y="10" width="14" height="8" rx="2" fill="${color}"/>`
+      : `<rect x="8.5" y="8.5" width="11" height="11" rx="2.5" fill="${color}"/>`;
   return `<svg class="fact-icon" viewBox="0 0 28 28" aria-hidden="true">
-    <circle cx="14" cy="14" r="11.5" fill="none" stroke="${THEME.light.overload}" stroke-width="2.4"/>${shape}
+    <circle cx="14" cy="14" r="11.5" fill="none" stroke="${color}" stroke-width="2.4"/>${shape}
   </svg>`;
 }
 

@@ -33,11 +33,9 @@ function overloadTo(world, fraction) {
 }
 
 export const tests = [
-  ["every terrain kind has its own texture", () => {
-    const patterns = Object.values(TERRAIN_TYPES).map((t) => t.pattern);
-    assert.equal(new Set(patterns).size, patterns.length, "no two kinds share a texture");
-    const bad = validateData({ ...GAME_DATA, effects: EFFECT_NAMES, terrain: { ...TERRAIN_TYPES, mud: { name: "Mud", pattern: "plaid" } } });
-    assert.ok(bad.some((e) => e.includes("terrain.mud.pattern")), bad.join("\n"));
+  ["every terrain kind has a name", () => {
+    const bad = validateData({ ...GAME_DATA, effects: EFFECT_NAMES, terrain: { ...TERRAIN_TYPES, mud: {} } });
+    assert.ok(bad.some((e) => e.includes("terrain.mud.name")), bad.join("\n"));
   }],
   ["a site that is almost full warns once per climb", () => {
     const world = makeWorld();

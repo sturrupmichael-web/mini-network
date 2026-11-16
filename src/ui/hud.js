@@ -18,6 +18,12 @@ const SOUND_OFF = svg('<path d="M3 8h3l4-3v10l-4-3H3z" fill="currentColor"/><pat
 const MOON = svg('<path d="M16 12.5A6.5 6.5 0 0 1 7.5 4a6.5 6.5 0 1 0 8.5 8.5z" fill="currentColor"/>');
 const SUN = svg('<circle cx="10" cy="10" r="3.2" fill="currentColor"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/>');
 const MENU_ICON = svg('<path d="M4 6h12M4 10h12M4 14h12"/>');
+/** The week clock: seven tick marks, one per day; a wedge fills through the week (CSS --week). */
+const DIAL_TICKS = `<svg viewBox="0 0 36 36" width="100%" height="100%">${Array.from({ length: 7 }, (_, i) => {
+  const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
+  const p = (r) => `${(18 + Math.cos(a) * r).toFixed(2)} ${(18 + Math.sin(a) * r).toFixed(2)}`;
+  return `<path d="M${p(13.2)} L${p(16.2)}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>`;
+}).join("")}</svg>`;
 
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -55,26 +61,29 @@ export function createHud(root, opts) {
     <div class="hud-top">
       <div class="hud-left">
         <div class="hud-score" aria-live="polite">
+          <span class="hud-score-icon" aria-hidden="true"></span>
           <span class="hud-score-value" data-hud="score">0</span>
           <span class="hud-score-label">delivered</span>
         </div>
-        <div class="hud-clock" data-hud="clock">
-          <span class="hud-clock-dial" data-hud="dial"></span>
-          <span data-hud="clock-text">Week 1 · Mon</span>
-        </div>
         <div class="hud-run" data-hud="run"></div>
       </div>
-      <div class="hud-controls" role="group" aria-label="Game controls">
-        <button type="button" class="hud-btn" data-hud="theme" aria-label="Dark mode">${MOON}</button>
-        <button type="button" class="hud-btn" data-hud="mute" aria-label="Mute sound" aria-pressed="false">${SOUND_ON}</button>
-        <button type="button" class="hud-btn" data-hud="pause" aria-label="Pause" aria-pressed="false">❚❚</button>
-        ${speeds
-          .map(
-            (s) =>
-              `<button type="button" class="hud-btn" data-speed="${s}" aria-label="${s}× speed" aria-pressed="false">${s}×</button>`,
-          )
-          .join("")}
-        <button type="button" class="hud-btn" data-hud="menu" aria-label="Menu">${MENU_ICON}</button>
+      <div class="hud-right">
+        <div class="hud-controls" role="group" aria-label="Game controls">
+          <button type="button" class="hud-btn" data-hud="theme" aria-label="Dark mode">${MOON}</button>
+          <button type="button" class="hud-btn" data-hud="mute" aria-label="Mute sound" aria-pressed="false">${SOUND_ON}</button>
+          <button type="button" class="hud-btn" data-hud="pause" aria-label="Pause" aria-pressed="false">❚❚</button>
+          ${speeds
+            .map(
+              (s) =>
+                `<button type="button" class="hud-btn" data-speed="${s}" aria-label="${s}× speed" aria-pressed="false">${s}×</button>`,
+            )
+            .join("")}
+          <button type="button" class="hud-btn" data-hud="menu" aria-label="Menu">${MENU_ICON}</button>
+        </div>
+        <div class="hud-clock" data-hud="clock">
+          <span class="hud-clock-text" data-hud="clock-text">Week 1 · Mon</span>
+          <span class="hud-clock-dial" data-hud="dial" aria-hidden="true">${DIAL_TICKS}</span>
+        </div>
       </div>
     </div>
     <div class="hud-tray" data-hud="tray">
@@ -384,10 +393,12 @@ export function createHud(root, opts) {
         shown.clock = text;
         el.clockText.textContent = text;
       }
-      const dial = Math.round(c.dayFraction * 100);
+      // The wedge fills through the week (and so a little each day).
+      const dial = Math.round(((c.dayOfWeek + c.dayFraction) / 7) * 280) / 2.8;
       if (dial !== shown.dial) {
         shown.dial = dial;
-        el.dial.style.setProperty("--day", `${dial}%`);
+        el.dial.style.setProperty("--week", `${dial}%`);
+        el.dial.style.setProperty("--day", `${Math.round(c.dayFraction * 100)}%`);
       }
       if (shown.paused !== loop.paused || shown.speed !== loop.speed) {
         shown.paused = loop.paused;
@@ -431,7 +442,7 @@ export function createHud(root, opts) {
           const frames = world.history;
           const report = runReport(world);
           // The timelapse outlines the busiest link and rings the site that went down.
-          const marks = { link: report.busiest, siteId: world.over.siteId };
+          const marks = { link: report.busiest, siteId: world.over.siteId, palette: world.map?.palette };
           el.timelapseBox.hidden = frames.length === 0;
           if (frames.length > 0) {
             stopTimelapse = playTimelapse(el.timelapse, frames, world.data.sites, marks);
@@ -535,57 +546,53 @@ export function createHud(root, opts) {
 /** A small picture of what the info card describes, drawn like the map draws it. */
 export function infoIconSvg(icon) {
   if (!icon) return "";
-  const svg = (body) => `<svg viewBox="0 0 28 28" width="28" height="28">${body}</svg>`;
+  // Flat pieces with a soft drop shadow, as on the map.
+  const svg = (body) =>
+    `<svg viewBox="0 0 28 28" width="28" height="28"><defs><filter id="ii-shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0.8" dy="1.6" stdDeviation="1.2" flood-color="rgb(60,48,36)" flood-opacity="0.25"/></filter></defs><g filter="url(#ii-shadow)">${body}</g></svg>`;
   const color = escapeHtml(icon.color ?? "#888");
-  const shape = (kind, fill, stroke) => {
-    const st = stroke ? `stroke="#fff" stroke-width="2" stroke-linejoin="round"` : "";
+  const light = (t) => `color-mix(in srgb, ${color}, #fff ${t}%)`;
+  const piece = (kind) => {
     switch (kind) {
       case "hub":
-        return `<rect x="5" y="5" width="18" height="18" rx="6" fill="${fill}" ${st}/>`;
-      case "square":
-        return `<rect x="6" y="6" width="16" height="16" fill="${fill}" ${st}/>`;
-      case "triangle":
-        return `<path d="M14 4 L24 22 L4 22 Z" fill="${fill}" ${st}/>`;
-      case "diamond":
-        return `<path d="M14 4 L24 14 L14 24 L4 14 Z" fill="${fill}" ${st}/>`;
-      case "edge":
-        return `<path d="M14 3 L23.5 8.5 L23.5 19.5 L14 25 L4.5 19.5 L4.5 8.5 Z" fill="${fill}" ${st}/>`;
+        return `<rect x="5" y="5" width="18" height="18" rx="3" fill="${color}"/>` + [10, 14, 18].map((y) => `<rect x="8" y="${y - 0.75}" width="12" height="1.5" fill="${light(18)}"/>`).join("");
       case "cloud":
-        return `<path d="M7 20 A5 5 0 0 1 8 10 A7 7 0 0 1 20.5 10 A5 5 0 0 1 21 20 Z" fill="${fill}" ${st}/>`;
+      case "edge":
       case "district":
-        return `<path d="M4 10 L14 4 L24 10 L24 21 Q24 24 21 24 L7 24 Q4 24 4 21 Z" fill="${fill}" ${st}/>`;
+        return `<rect x="3" y="9" width="22" height="10" rx="2.5" fill="${color}"/>` + [12.3, 15.7].map((y) => `<rect x="6.5" y="${y - 0.75}" width="15" height="1.5" fill="${light(18)}"/>`).join("");
       case "switch":
-        return (
-          `<rect x="6" y="6" width="16" height="16" rx="6" fill="${fill}" ${st}/>` +
-          [10, 18].flatMap((x) => [10, 18].map((y) => `<circle cx="${x}" cy="${y}" r="1.6" fill="#fff"/>`)).join("")
-        );
-      default:
-        return `<circle cx="14" cy="14" r="${stroke ? 9 : 7}" fill="${fill}" ${st}/>`;
+        return `<circle cx="14" cy="14" r="9" fill="none" stroke="${color}" stroke-width="${icon.core ? 5 : 4}"/>`;
+      default: {
+        // A workstation: a rounded square with a lighter "monitor".
+        const s = icon.grown ? 18 : 15;
+        const o = 14 - s / 2;
+        const monitors = icon.grown
+          ? `<rect x="${o + 3}" y="${o + 3.2}" width="5.4" height="5.6" rx="1" fill="${light(25)}"/><rect x="${o + 9.6}" y="${o + 3.2}" width="5.4" height="5.6" rx="1" fill="${light(25)}"/>`
+          : `<rect x="${o + 4.2}" y="${o + 2.7}" width="${s - 8.4}" height="4.8" rx="1" fill="${light(25)}"/>`;
+        return `<rect x="${o}" y="${o}" width="${s}" height="${s}" rx="${s * 0.22}" fill="${color}"/>${monitors}`;
+      }
     }
   };
   switch (icon.type) {
     case "site":
-      return svg(shape(icon.shape, color, true));
-    case "packet":
-      return svg(shape(icon.shape, color, false));
+      return svg(piece(icon.shape));
+    case "packet": {
+      const w = 12 * Math.min(1.45, Math.max(0.85, 0.8 + 0.2 * (icon.size ?? 1)));
+      return svg(`<rect x="${14 - w / 2}" y="10.5" width="${w}" height="7" rx="3.5" fill="${color}"/>`);
+    }
     case "link": {
-      const width = 3 + (icon.tier ?? 0) * 1.5;
-      return svg(`<path d="M3 21 L11 13 L25 13" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`);
+      const width = icon.backbone ? 7 : 3 + (icon.tier ?? 0) * 1.3;
+      const path = "M3 21 L11 13 L25 13";
+      const rails = icon.leased && !icon.backbone ? `<path d="${path}" fill="none" stroke="#4A5560" stroke-width="${width + 2.4}" stroke-linecap="round" stroke-linejoin="round"/>` : "";
+      return svg(`${rails}<path d="${path}" fill="none" stroke="${icon.backbone ? "#4A5560" : color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`);
     }
     case "terrain": {
       const fill = escapeHtml(icon.fill ?? "#bbb");
-      const edge = escapeHtml(icon.edge ?? "#888");
-      const marks = {
-        water: `<path d="M6 11 q2 -2 4 0 t4 0 t4 0 t4 0 M6 18 q2 -2 4 0 t4 0 t4 0 t4 0" fill="none" stroke="${edge}" stroke-width="1.5"/>`,
-        park: [9, 14, 19].flatMap((x) => [10, 18].map((y) => `<circle cx="${x}" cy="${y}" r="1.6" fill="${edge}"/>`)).join(""),
-        hills: `<path d="M5 13 L13 5 M5 21 L21 5 M11 23 L23 11" stroke="${edge}" stroke-width="1.5"/>`,
-      };
-      return svg(`<rect x="3" y="3" width="22" height="22" rx="4" fill="${fill}" stroke="${edge}" stroke-width="1.5"/>${marks[icon.terrain] ?? ""}`);
+      return `<svg viewBox="0 0 28 28" width="28" height="28"><path d="M6 8 Q6 4 11 4 L19 4 Q24 4 24 9 L24 13 Q24 15 22 16 Q20 17 21 20 Q21 24 16 24 L8 24 Q4 24 4 20 L4 12 Q4 9 6 8 Z" fill="${fill}"/></svg>`;
     }
     case "boundary":
-      return svg(`<path d="M4 24 C10 18 10 10 16 8 S22 5 25 4" fill="none" stroke="${icon.color ? color : "var(--muted)"}" stroke-width="7" stroke-linecap="round"/>`);
+      return `<svg viewBox="0 0 28 28" width="28" height="28"><path d="M4 24 C10 18 10 10 16 8 S22 5 25 4" fill="none" stroke="${icon.color ? color : "var(--muted)"}" stroke-width="7" stroke-linecap="round"/></svg>`;
     case "closed":
-      return svg(`<rect x="4" y="4" width="20" height="20" rx="3" fill="var(--muted)" opacity="0.35" stroke="var(--muted)" stroke-dasharray="3 3"/>`);
+      return `<svg viewBox="0 0 28 28" width="28" height="28"><rect x="4" y="4" width="20" height="20" rx="6" fill="var(--muted)" opacity="0.3"/></svg>`;
     default:
       return "";
   }

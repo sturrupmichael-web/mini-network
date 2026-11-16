@@ -2,7 +2,7 @@
  * The game-over timelapse: the network growing day by day, drawn small on
  * a canvas in the game-over card, plus a "Save image" of the final frame.
  */
-import { THEME } from "../../data/theme.js";
+import { NODE, PALETTES, SHADOW } from "../../data/theme.js";
 
 const FRAME_SECONDS = 0.45;
 const HOLD_SECONDS = 2;
@@ -63,7 +63,7 @@ export function drawFrame(canvas, frames, index, siteTypes, marks = {}) {
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const style = getComputedStyle(canvas);
-  ctx.fillStyle = style.getPropertyValue("--bg").trim() || "#f6f4ef";
+  ctx.fillStyle = style.getPropertyValue("--map").trim() || style.getPropertyValue("--bg").trim() || "#EFE9DC";
   ctx.fillRect(0, 0, cssW, cssH);
 
   const box = bounds(frames);
@@ -89,24 +89,50 @@ export function drawFrame(canvas, frames, index, siteTypes, marks = {}) {
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
-  for (const link of frame.links) {
-    ctx.strokeStyle = THEME.lineColors[link.line % THEME.lineColors.length];
-    ctx.lineWidth = (link.backbone ? 5 : 3.2) * k;
+  // Cables: a soft shadow, then the light cable (backbones in slate).
+  const dark = document.documentElement.dataset.theme === "dark";
+  const pal = dark ? PALETTES.night : PALETTES[marks.palette] ?? PALETTES.office;
+  const node = dark ? NODE.night : NODE.day;
+  const trace = (link) => {
     ctx.beginPath();
     link.path.forEach((p, i) => ctx[i === 0 ? "moveTo" : "lineTo"](ox + p.x * scale, oy + p.y * scale));
     ctx.stroke();
+  };
+  const width = (link) => (link.backbone ? 5 : 3.2) * k;
+  ctx.save();
+  ctx.translate(0.6, 1.2);
+  ctx.globalAlpha = dark ? SHADOW.alpha.night : SHADOW.alpha.day + 0.08;
+  ctx.strokeStyle = dark ? SHADOW.rgb.night : SHADOW.rgb.day;
+  for (const link of frame.links) {
+    ctx.lineWidth = width(link) + 0.8;
+    trace(link);
   }
+  ctx.restore();
+  for (const link of frame.links) {
+    ctx.strokeStyle = link.backbone ? pal.backbone : pal.cable;
+    ctx.lineWidth = width(link);
+    trace(link);
+  }
+  const colorOf = (def) => (def.node ? node[def.node] : def.junction ? pal.cable : pal.backbone);
   for (const s of frame.sites) {
     const def = siteTypes[s.type];
     const r = 5.5 * def.size * (s.grown ? 1.3 : 1) * k;
-    ctx.beginPath();
-    if (def.shape === "circle") ctx.arc(ox + s.x * scale, oy + s.y * scale, r, 0, Math.PI * 2);
-    else ctx.roundRect(ox + s.x * scale - r, oy + s.y * scale - r, r * 2, r * 2, r * 0.3);
-    ctx.fillStyle = def.color;
+    const server = def.shape === "hub" || def.shape === "cloud" || def.shape === "edge" || def.shape === "district";
+    const w = server ? r * 2.2 : r * 1.6;
+    const h = server ? (def.shape === "hub" ? r * 2.2 : r) : r * 1.6;
+    const x = ox + s.x * scale;
+    const y = oy + s.y * scale;
+    const shape = (dx, dy) => {
+      ctx.beginPath();
+      if (def.junction) ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+      else ctx.roundRect(x + dx - w / 2, y + dy - h / 2, w, h, Math.min(w, h) * 0.22);
+    };
+    shape(0.6, 1.2);
+    ctx.fillStyle = dark ? SHADOW.color.night : SHADOW.color.day;
     ctx.fill();
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.5 * k;
-    ctx.stroke();
+    shape(0, 0);
+    ctx.fillStyle = colorOf(def);
+    ctx.fill();
   }
   const ended = index === frames.length - 1 && marks.siteId !== undefined && frame.sites.find((s) => s.id === marks.siteId);
   if (ended) {
@@ -114,7 +140,7 @@ export function drawFrame(canvas, frames, index, siteTypes, marks = {}) {
     const r = 5.5 * def.size * (ended.grown ? 1.3 : 1) * k;
     ctx.beginPath();
     ctx.arc(ox + ended.x * scale, oy + ended.y * scale, r + 5, 0, Math.PI * 2);
-    ctx.strokeStyle = THEME.light.overload;
+    ctx.strokeStyle = colorOf(def);
     ctx.lineWidth = 2.2;
     ctx.stroke();
   }

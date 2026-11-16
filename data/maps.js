@@ -5,6 +5,8 @@
  *   id          Stable id (used for high scores and the daily challenge).
  *   name        Display name.
  *   description One line for the title screen.
+ *   palette     Ground colours in the light theme: "office" | "campus" |
+ *               "datacenter" (theme.js PALETTES).
  *   width, height   Size of the playable area in world units. Every site
  *               must sit inside it. On a portrait phone a landscape map is
  *               turned 90° to fill the screen.
@@ -25,6 +27,7 @@ export const MAPS = [
   {
     id: "florida-region",
     name: "Florida Region",
+    palette: "office",
     description: "A long peninsula, a bay, and one carrier per coast.",
     width: 1200,
     height: 800,
@@ -63,6 +66,7 @@ export const MAPS = [
   {
     id: "coast-to-coast",
     name: "Coast to Coast",
+    palette: "datacenter",
     description: "A wide country split into three carrier regions.",
     width: 1600,
     height: 700,
@@ -107,6 +111,7 @@ export const MAPS = [
   {
     id: "campus",
     name: "Campus",
+    palette: "campus",
     description: "Tight buildings around a quad, with a road down the middle.",
     width: 900,
     height: 900,

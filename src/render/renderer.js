@@ -1,23 +1,77 @@
 /**
  * Draws the world onto the canvas. Reads simulation state, never changes it.
+ *
+ * The look follows the Nano Networks style guide (docs/style-guide.md):
+ * flat, rounded pieces with no outlines, depth only from a soft drop shadow
+ * (SHADOW.tier in theme.js), and colour only for gameplay. Sizes are
+ * fractions of a tile: one grid square on screen.
+ *
+ * Draw order: ground, zones, cables (shadows first), switches,
+ * workstations and servers, packets, ticket pins and ring timers.
+ *
+ * Performance: the ground and zones are drawn to a cached layer, and so are
+ * the cables (with their blurred shadows), each redrawn only when what they
+ * show changes. Sites are drawn from cached sprites with their shadow baked
+ * in. Only packets, pins, rings and other moving things are drawn from
+ * scratch each frame, with cheap unblurred shadows.
  */
-import { TERRAIN_TYPES } from "../../data/terrain.js";
-import { THEME } from "../../data/theme.js";
+import { MOTION, SHADOW, SIZE, THEME, mapColors, nodeColor } from "../../data/theme.js";
 import { pointAlong } from "../sim/geometry.js";
 import { cellCenter, cellOf, cellsToPath, gridSize, straightCells } from "../sim/grid.js";
 import { isBlocked } from "../sim/links.js";
 import { busiestLink } from "../sim/runstats.js";
 import { worldToScreen } from "./camera.js";
 
-/** Drawing sizes shrink a little on small screens and grow on big ones. */
+/** Small UI bits (the remove button, arrows) shrink a little on small screens and grow on big ones. */
 export function uiScale(camera) {
   return Math.min(1.3, Math.max(0.8, camera.scale / 0.8));
 }
 
-export function siteRadiusPx(world, site, camera) {
+/** One grid square on screen, in CSS px. Cables are sized from this. */
+export function tilePx(world, camera) {
+  return world.config.grid.cellSize * camera.scale;
+}
+
+/**
+ * The tile size pieces (sites, packets, pins) are drawn at: a grid square,
+ * but never so small that a site is hard to see or tap on a phone.
+ */
+export function pieceTile(world, camera) {
+  return Math.min(44, Math.max(24, tilePx(world, camera)));
+}
+
+/**
+ * What a site is drawn as: "workstation" (sites that send traffic),
+ * "server" (sites traffic goes to) or "switch" (junctions).
+ */
+export function siteForm(def) {
+  if (def.junction) return "switch";
+  if (def.shape === "hub" || def.shape === "cloud" || def.shape === "edge" || def.shape === "district") return "server";
+  return "workstation";
+}
+
+/** A site's size on screen: { form, w, h, radius } in CSS px. */
+export function siteBox(world, site, camera) {
   const def = world.data.sites[site.type];
+  const P = pieceTile(world, camera);
+  const form = siteForm(def);
+  if (form === "switch") {
+    const d = SIZE.switch * P * (site.core ? 1.12 : 1);
+    return { form, w: d, h: d, radius: d / 2 };
+  }
+  if (form === "server") {
+    const big = def.shape === "hub";
+    return { form, w: SIZE.server.w * P, h: (big ? SIZE.server.big : SIZE.server.h) * P, radius: SIZE.server.radius * P };
+  }
   const grown = site.grown ? world.config.siteGrowth.size : 1;
-  return THEME.sizes.siteRadius * def.size * grown * uiScale(camera);
+  const s = SIZE.workstation * P * grown;
+  return { form, w: s, h: s, radius: SIZE.wsRadius * P * grown };
+}
+
+/** Roughly how far a site reaches from its centre (for tapping and placing things next to it). */
+export function siteRadiusPx(world, site, camera) {
+  const b = siteBox(world, site, camera);
+  return b.form === "server" ? Math.max(b.w, b.h) / 2 - b.h * 0.1 : Math.max(b.w, b.h) / 2;
 }
 
 /** Screen position of the "remove" button for a selected link. */
@@ -29,8 +83,9 @@ export function removeButtonPos(world, link, camera) {
 /** Screen position of the "remove" button for a selected switch. */
 export function siteRemoveButtonPos(world, site, camera) {
   const p = worldToScreen(camera, site.x, site.y);
-  const r = siteRadiusPx(world, site, camera);
-  return { x: p.x + r + removeButtonRadius(camera) * 0.9, y: p.y - r - removeButtonRadius(camera) * 0.9 };
+  const r = siteRadiusPx(world, site, camera) * 0.75;
+  const br = removeButtonRadius(camera) * 0.9;
+  return { x: p.x + r + br, y: p.y - r - br };
 }
 
 /** How dark it is: 0 in the day, 1 in the middle of the night, smooth in between. */
@@ -44,51 +99,100 @@ export function nightAmount(world) {
   return Math.max(0, Math.min(1, intoNight));
 }
 
-function mixColor(a, b, t) {
+function parseColor(c) {
+  if (c.startsWith("#")) {
+    const n = parseInt(c.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = c.match(/[\d.]+/g) ?? [0, 0, 0];
+  return [Number(m[0]), Number(m[1]), Number(m[2])];
+}
+
+/** Mix colour a toward b by t (0–1). Takes #rrggbb or rgb(); returns rgb(). */
+export function mixColor(a, b, t) {
   if (t <= 0) return a;
-  const pa = parseInt(a.slice(1), 16);
-  const pb = parseInt(b.slice(1), 16);
-  const ch = (p, shift) => (p >> shift) & 255;
-  const mix = (shift) => Math.round(ch(pa, shift) + (ch(pb, shift) - ch(pa, shift)) * t);
-  return `rgb(${mix(16)}, ${mix(8)}, ${mix(0)})`;
+  const pa = parseColor(a);
+  const pb = parseColor(b);
+  const mix = (i) => Math.round(pa[i] + (pb[i] - pa[i]) * Math.min(1, t));
+  return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`;
 }
 
 export function removeButtonRadius(camera) {
   return THEME.sizes.removeButton * uiScale(camera);
 }
 
+/** The colour a site is drawn in for this theme. */
+export function siteColor(world, site, colors) {
+  const def = world.data.sites[site.type];
+  if (def.junction) return site.core ? colors.backbone : colors.cable;
+  if (def.node) return nodeColor(def.node, colors.theme) ?? def.color;
+  // Neutral servers (the data center) are the dark, "elevated" slate.
+  return colors.backbone;
+}
+
+/** The colour a packet of this traffic type is drawn in for this theme. */
+export function trafficColor(world, trafficId, colors) {
+  const t = world.data.traffic[trafficId];
+  if (!t) return colors.ringNeutral;
+  return (t.node && nodeColor(t.node, colors.theme)) || t.color;
+}
+
+/** The colour of a site's ring timer, pins and edge arrow. */
+function ringColor(world, site, colors) {
+  const def = world.data.sites[site.type];
+  return def.node ? siteColor(world, site, colors) : colors.ringNeutral;
+}
+
 /**
- * @param {object} ui  { drag, reroute, selectedLinkId, hoverSiteId } from input.
+ * Links aren't colour-coded any more (colour only means traffic); info
+ * cards and the run report draw a link in this neutral slate.
+ */
+export function lineColor() {
+  return "#8F9AA6";
+}
+
+const easeOutBack = (t) => {
+  const c = 1.70158;
+  return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2;
+};
+
+/**
+ * @param {object} ui  { drag, reroute, selectedLinkId, hoverSiteId, theme, … } from input.
  * @param {number} now Real time in seconds, for gentle animations.
  */
 export function render(ctx, view, world, camera, ui, now = 0) {
-  const colors = THEME[ui.theme] ?? THEME.light;
+  const colors = mapColors(ui.theme, world.map?.palette);
+  const mode = colors.theme === "dark" ? "night" : "day";
   const k = uiScale(camera);
-  ctx.fillStyle = mixColor(colors.background, colors.nightBackground, nightAmount(world));
-  ctx.fillRect(0, 0, view.width, view.height);
+  const T = tilePx(world, camera);
+  const P = pieceTile(world, camera);
+  const env = { ctx, view, world, camera, ui, now, colors, mode, k, T, P };
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  drawTerrain(ctx, world, camera, colors);
-  drawBoundaries(ctx, world, camera, colors, k);
-  // The shaded edge follows the camera's eased view, so it glides open too.
-  drawClosed(ctx, view, world, camera, colors, ui.shownView);
-  drawGrid(ctx, world, camera, colors, k, Boolean(ui.drag), ui.shownView);
-  drawLinks(ctx, world, camera, colors, k, ui, now);
-  if (ui.drag) drawPreview(ctx, world, camera, ui.drag, k);
-  drawBlockedCell(ctx, world, camera, colors, ui.blockedCell, now);
-  if (ui.reroute) drawReroute(ctx, world, camera, ui.reroute, k);
-  if (ui.place?.target) drawDropTarget(ctx, world, camera, colors, ui.place.target, k);
-  drawTravellingPackets(ctx, world, camera, k);
-  drawPops(ctx, ui.pops, now, k);
-  for (const site of world.sites) drawOverload(ctx, world, camera, colors, site, k, now);
-  for (const site of world.sites) drawSite(ctx, world, camera, colors, site, ui, k);
-  for (const site of world.sites) drawQueue(ctx, world, camera, site, k);
-  drawOffscreenArrows(ctx, view, world, camera, colors, ui.insets, k, now);
+  // 1–2. Ground and zones (cached).
+  drawGroundLayer(env);
+  // 3–4. Cables, their shadows first (cached while nothing changes).
+  drawCableLayer(env);
+  drawRemovedLinks(env);
+  if (ui.drag) drawPreview(env, ui.drag);
+  drawBlockedCell(env, ui.blockedCell);
+  if (ui.reroute) drawReroute(env, ui.reroute);
+  if (ui.place?.target) drawDropTarget(env, ui.place.target);
+  // 5–6. Switches, then workstations and servers.
+  for (const site of world.sites) if (siteForm(world.data.sites[site.type]) === "switch") drawSite(env, site);
+  for (const site of world.sites) if (siteForm(world.data.sites[site.type]) !== "switch") drawSite(env, site);
+  // 7. Packets: waiting (parked bumper to bumper), travelling, and just delivered.
+  drawPackets(env);
+  drawPops(env, ui.pops);
+  // 8. Ticket pins and ring timers.
+  for (const site of world.sites) drawPins(env, site);
+  for (const site of world.sites) drawRing(env, site);
+  drawOffscreenArrows(env, ui.insets);
   const selected = ui.selectedLinkId && world.linkById.get(ui.selectedLinkId);
-  if (selected) drawRemoveButton(ctx, camera, colors, removeButtonPos(world, selected, camera));
+  if (selected) drawRemoveButton(env, removeButtonPos(world, selected, camera));
   const selectedSite = ui.selectedSiteId && world.siteById.get(ui.selectedSiteId);
-  if (selectedSite) drawRemoveButton(ctx, camera, colors, siteRemoveButtonPos(world, selectedSite, camera));
+  if (selectedSite) drawRemoveButton(env, siteRemoveButtonPos(world, selectedSite, camera));
   if (world.over) {
     ctx.fillStyle = colors.dim;
     ctx.fillRect(0, 0, view.width, view.height);
@@ -96,17 +200,17 @@ export function render(ctx, view, world, camera, ui, now = 0) {
     const top = busiestLink(world);
     const busiest = top && top.linkId !== null && world.linkById.get(top.linkId);
     if (busiest) {
-      ctx.globalAlpha = 0.22;
+      ctx.globalAlpha = 0.18;
       ctx.strokeStyle = colors.removeFill;
-      ctx.lineWidth = linkWidth(world, busiest, k) + 12 * k;
+      ctx.lineWidth = cableWidth(env, busiest) + 12 * k;
       strokePath(ctx, toScreenPath(camera, busiest.path));
       ctx.globalAlpha = 1;
-      drawLink(ctx, world, camera, colors, k, ui, now, busiest);
+      drawCable(ctx, env, busiest, busiest.path, 1);
     }
     const site = world.siteById.get(world.over.siteId);
     if (site) {
-      drawOverload(ctx, world, camera, colors, site, k, now);
-      drawSite(ctx, world, camera, colors, site, ui, k);
+      drawSite(env, site);
+      drawRing(env, site);
     }
   }
 }
@@ -122,127 +226,235 @@ function strokePath(ctx, pts) {
   ctx.stroke();
 }
 
+/** Sets ctx's transform so world units can be drawn directly (on top of the dpr scale). */
+function applyCamera(ctx, camera) {
+  const s = camera.scale;
+  if (camera.rotated) ctx.transform(0, s, -s, 0, camera.offsetX + camera.mapHeight * s, camera.offsetY);
+  else ctx.transform(s, 0, 0, s, camera.offsetX, camera.offsetY);
+}
+
+// ---------------------------------------------------------------------------
+// Offscreen canvases: cached layers and sprites.
+
+function makeCanvas(w, h) {
+  if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(Math.max(1, w), Math.max(1, h));
+  if (typeof document !== "undefined") {
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, w);
+    c.height = Math.max(1, h);
+    return c;
+  }
+  return null;
+}
+
+/** A canvas the size of the view (device px), reused between frames. */
+function layerCanvas(slot, view) {
+  const w = Math.round(view.width * view.dpr);
+  const h = Math.round(view.height * view.dpr);
+  let c = layers[slot];
+  if (!c) c = layers[slot] = makeCanvas(w, h);
+  if (!c) return null;
+  if (c.width !== w || c.height !== h) {
+    c.width = w;
+    c.height = h;
+  }
+  return c;
+}
+const layers = {};
+const layerKeys = {};
+
+/** Draw a cached layer, redrawing it first if `key` changed. */
+function cachedLayer(env, slot, key, paint) {
+  const { ctx, view } = env;
+  const c = layerCanvas(slot, view);
+  if (!c) {
+    // No offscreen canvases (very old browser): draw straight to the screen.
+    paint(ctx);
+    return;
+  }
+  if (layerKeys[slot] !== key) {
+    const lc = c.getContext("2d");
+    lc.setTransform(1, 0, 0, 1, 0, 0);
+    lc.clearRect(0, 0, c.width, c.height);
+    lc.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    lc.lineCap = "round";
+    lc.lineJoin = "round";
+    paint(lc);
+    layerKeys[slot] = key;
+  }
+  ctx.drawImage(c, 0, 0, view.width, view.height);
+}
+
 /**
- * Terrain squares (terrain.js). Each kind is filled, textured with its own
- * faint pattern (waves, dots, hatching), and outlined where it meets anything else, so blocked
- * areas stand out from open ground in both themes.
+ * Draw only the soft shadow of some shapes, at a depth tier, onto ctx.
+ * The shapes are drawn far off to the side with the shadow offset back
+ * onto the canvas, into a scratch layer in solid colour, and the layer is
+ * then laid down at the shadow's alpha, so shadows that overlap don't get
+ * darker. Used for cached layers only (blur is slow).
  */
-function drawTerrain(ctx, world, camera, colors) {
+function shadowPass(env, ctx, tier, paintShapes) {
+  const t = SHADOW.tier[tier];
+  if (!t) return;
+  const { view, mode } = env;
+  const scratch = layerCanvas("shadow", view);
+  if (!scratch) return;
+  const sc = scratch.getContext("2d");
+  sc.setTransform(1, 0, 0, 1, 0, 0);
+  sc.clearRect(0, 0, scratch.width, scratch.height);
+  const away = view.width + 200;
+  sc.setTransform(view.dpr, 0, 0, view.dpr, -away * view.dpr, 0);
+  sc.shadowColor = SHADOW.rgb[mode];
+  sc.shadowBlur = t.blur * view.dpr;
+  sc.shadowOffsetX = (away + t.x) * view.dpr;
+  sc.shadowOffsetY = t.y * view.dpr;
+  sc.lineCap = "round";
+  sc.lineJoin = "round";
+  sc.strokeStyle = "#000";
+  sc.fillStyle = "#000";
+  paintShapes(sc);
+  sc.shadowColor = "transparent";
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = SHADOW.alpha[mode];
+  ctx.drawImage(scratch, 0, 0);
+  ctx.restore();
+}
+
+const sprites = new Map();
+/**
+ * A piece drawn once, with its blurred shadow baked in, and reused.
+ * `paint(c, w, h)` draws the piece centred on (0, 0). Returns
+ * { canvas, w, h } where w/h are the sprite's size in CSS px (centred).
+ */
+function sprite(key, w, h, tier, mode, dpr, paint) {
+  const fullKey = `${key}|${w.toFixed(1)}|${h.toFixed(1)}|${tier}|${mode}|${dpr}`;
+  let s = sprites.get(fullKey);
+  if (s) return s;
+  const t = SHADOW.tier[tier] ?? { x: 0, y: 0, blur: 0 };
+  const pad = Math.ceil(t.blur * 1.5 + Math.max(Math.abs(t.x), Math.abs(t.y)) + 2);
+  const sw = w + pad * 2;
+  const sh = h + pad * 2;
+  const c = makeCanvas(Math.ceil(sw * dpr), Math.ceil(sh * dpr));
+  if (!c) return null;
+  const sc = c.getContext("2d");
+  sc.setTransform(dpr, 0, 0, dpr, (sw / 2) * dpr, (sh / 2) * dpr);
+  sc.shadowColor = SHADOW.color[mode];
+  sc.shadowBlur = t.blur * dpr;
+  sc.shadowOffsetX = t.x * dpr;
+  sc.shadowOffsetY = t.y * dpr;
+  paint(sc, w, h, () => {
+    sc.shadowColor = "transparent";
+  });
+  if (sprites.size > 400) sprites.clear();
+  s = { canvas: c, w: sw, h: sh };
+  sprites.set(fullKey, s);
+  return s;
+}
+
+function drawSprite(ctx, s, x, y, scale = 1) {
+  ctx.drawImage(s.canvas, x - (s.w / 2) * scale, y - (s.h / 2) * scale, s.w * scale, s.h * scale);
+}
+
+// ---------------------------------------------------------------------------
+// 1–2. Ground and zones.
+
+function drawGroundLayer(env) {
+  const { world, camera, view, ui, colors } = env;
+  const shown = ui.shownView ?? world.view;
+  const night = Math.round(nightAmount(world) * 40) / 40;
+  const key = [
+    colors.theme,
+    world.map?.id,
+    view.width,
+    view.height,
+    view.dpr,
+    camera.scale.toFixed(4),
+    camera.offsetX.toFixed(1),
+    camera.offsetY.toFixed(1),
+    camera.rotated,
+    shown ? [shown.x, shown.y, shown.width, shown.height].map((n) => Math.round(n)).join(",") : "",
+    Boolean(ui.drag),
+    night,
+    world.terrain?.size ?? 0,
+  ].join("|");
+  cachedLayer(env, "ground", key, (c) => {
+    c.fillStyle = colors.background;
+    c.fillRect(0, 0, view.width, view.height);
+    drawTerrain(c, env);
+    drawBoundaries(c, env);
+    drawClosed(c, env, shown);
+    if (night > 0) {
+      // In-game night: the ground and zones darken a little.
+      c.globalAlpha = night * colors.nightDepth;
+      c.fillStyle = colors.nightBackground;
+      c.fillRect(0, 0, view.width, view.height);
+      c.globalAlpha = 1;
+    }
+    drawGrid(c, env, shown);
+  });
+}
+
+/**
+ * Terrain areas (terrain.js) as flat, soft-edged blobs: every blocked grid
+ * square, with the outside corners rounded off and the inside corners
+ * filled in, so the area reads as one smooth piece of ground.
+ */
+function drawTerrain(c, env) {
+  const { world, camera, colors } = env;
   if (!world.terrain?.size) return;
   const s = world.config.grid.cellSize;
-  const size = s * camera.scale + 0.6; // a hair of overlap so squares join up
-  const half = (s * camera.scale) / 2;
   const byKind = new Map();
   for (const [key, kind] of world.terrain) {
     if (!byKind.has(kind)) byKind.set(kind, []);
-    byKind.get(kind).push(key);
+    byKind.get(kind).push(key.split(",").map(Number));
   }
-  for (const [kind, keys] of byKind) {
-    const style = terrainStyle(colors, kind);
-    const cells = keys.map((key) => {
-      const [cx, cy] = key.split(",").map(Number);
-      const c = cellCenter(world, { cx, cy });
-      return { cx, cy, p: worldToScreen(camera, c.x, c.y) };
-    });
-
-    ctx.beginPath();
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const { p } of cells) {
-      ctx.rect(p.x - size / 2, p.y - size / 2, size, size);
-      minX = Math.min(minX, p.x - half);
-      minY = Math.min(minY, p.y - half);
-      maxX = Math.max(maxX, p.x + half);
-      maxY = Math.max(maxY, p.y + half);
+  c.save();
+  applyCamera(c, camera);
+  for (const [kind, cells] of byKind) {
+    const same = (cx, cy) => world.terrain.get(`${cx},${cy}`) === kind;
+    c.fillStyle = terrainStyle(colors, kind).fill;
+    c.beginPath();
+    const R = s * 0.5;
+    const r = s * 0.32;
+    for (const [cx, cy] of cells) {
+      const o = cellCenter(world, { cx, cy });
+      const x = o.x - s / 2;
+      const y = o.y - s / 2;
+      const up = same(cx, cy - 1);
+      const down = same(cx, cy + 1);
+      const left = same(cx - 1, cy);
+      const right = same(cx + 1, cy);
+      // Overlap a hair so neighbours join without seams.
+      const e = 0.4;
+      c.roundRect(x - e, y - e, s + 2 * e, s + 2 * e, [!up && !left ? R : 0, !up && !right ? R : 0, !down && !right ? R : 0, !down && !left ? R : 0]);
+      c.closePath();
+      // Fill inside corners: a neighbour on two sides but not on the diagonal.
+      if (up && right && !same(cx + 1, cy - 1)) filletPath(c, x + s, y, 1, -1, r);
+      if (up && left && !same(cx - 1, cy - 1)) filletPath(c, x, y, -1, -1, r);
+      if (down && right && !same(cx + 1, cy + 1)) filletPath(c, x + s, y + s, 1, 1, r);
+      if (down && left && !same(cx - 1, cy + 1)) filletPath(c, x, y + s, -1, 1, r);
     }
-    ctx.fillStyle = style.fill;
-    ctx.fill();
-
-    if (style.hatch) {
-      ctx.save();
-      ctx.clip();
-      drawPattern(ctx, TERRAIN_TYPES[kind]?.pattern ?? "hatch", style.hatch, camera.scale * s, { minX, minY, maxX, maxY });
-      ctx.restore();
-    }
-
-    if (style.edge) {
-      // Trace the area's outline in world space (the camera may be turned
-      // for a tall phone screen, so screen up isn't always grid up).
-      const same = (cx, cy) => world.terrain.get(`${cx},${cy}`) === kind;
-      const line = (x0, y0, x1, y1) => {
-        const a = worldToScreen(camera, x0, y0);
-        const b = worldToScreen(camera, x1, y1);
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-      };
-      ctx.strokeStyle = style.edge;
-      ctx.lineWidth = Math.max(1.5, 2 * camera.scale);
-      ctx.beginPath();
-      for (const { cx, cy } of cells) {
-        const c = cellCenter(world, { cx, cy });
-        const l = c.x - s / 2, r = c.x + s / 2, t = c.y - s / 2, b = c.y + s / 2;
-        if (!same(cx, cy - 1)) line(l, t, r, t);
-        if (!same(cx, cy + 1)) line(l, b, r, b);
-        if (!same(cx - 1, cy)) line(l, t, l, b);
-        if (!same(cx + 1, cy)) line(r, t, r, b);
-      }
-      ctx.stroke();
-    }
+    c.fill();
   }
+  c.restore();
 }
 
 /**
- * A texture over a terrain area (already clipped to it). `cell` is a grid
- * square's size on screen, so the texture scales with the zoom.
- *   waves  short wavy lines (water)
- *   dots   a staggered grid of dots (parks)
- *   hatch  diagonal lines (hills)
+ * A concave fillet at corner (x, y): the little region inside the empty
+ * diagonal cell, between its corner and a quarter circle of radius r.
  */
-function drawPattern(ctx, pattern, color, cell, box) {
-  const { minX, minY, maxX, maxY } = box;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = Math.max(1.2, cell * 0.06);
-  if (pattern === "dots") {
-    const gap = Math.max(9, cell * 0.5);
-    const r = Math.max(1.5, cell * 0.08);
-    ctx.beginPath();
-    for (let y = minY + gap / 2, row = 0; y < maxY; y += gap, row++) {
-      for (let x = minX + (row % 2 ? gap : gap / 2); x < maxX; x += gap) {
-        ctx.moveTo(x + r, y);
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-      }
-    }
-    ctx.fill();
-    return;
-  }
-  if (pattern === "waves") {
-    const gap = Math.max(9, cell * 0.5);
-    const len = Math.max(12, cell * 0.7);
-    const amp = Math.max(1.5, cell * 0.08);
-    ctx.beginPath();
-    for (let y = minY + gap / 2, row = 0; y < maxY; y += gap, row++) {
-      for (let x = minX - (row % 2 ? len / 2 : 0); x < maxX; x += len) {
-        ctx.moveTo(x, y);
-        ctx.quadraticCurveTo(x + len / 4, y - amp * 2, x + len / 2, y);
-        ctx.quadraticCurveTo(x + (3 * len) / 4, y + amp * 2, x + len, y);
-      }
-    }
-    ctx.stroke();
-    return;
-  }
-  const gap = Math.max(8, cell * 0.45);
-  const h = maxY - minY;
-  ctx.beginPath();
-  for (let x = minX - h; x < maxX; x += gap) {
-    ctx.moveTo(x, maxY);
-    ctx.lineTo(x + h, minY);
-  }
-  ctx.stroke();
+function filletPath(c, x, y, dx, dy, r) {
+  c.moveTo(x, y);
+  c.lineTo(x + dx * r, y);
+  c.arc(x + dx * r, y + dy * r, r, dy > 0 ? -Math.PI / 2 : Math.PI / 2, dx > 0 ? Math.PI : 0, (dx > 0) === (dy > 0));
+  c.lineTo(x, y);
+  c.closePath();
 }
 
-/** A red flash on the terrain square a drag just bumped into; fades over BLOCK_FLASH seconds. */
+/** A flash on the terrain square a drag just bumped into; fades over BLOCK_FLASH seconds. */
 const BLOCK_FLASH = 0.6;
-function drawBlockedCell(ctx, world, camera, colors, blocked, now) {
+function drawBlockedCell(env, blocked) {
+  const { ctx, world, camera, colors, now } = env;
   if (!blocked) return;
   const age = now - blocked.born;
   if (age < 0 || age > BLOCK_FLASH) return;
@@ -252,12 +464,9 @@ function drawBlockedCell(ctx, world, camera, colors, blocked, now) {
   const size = world.config.grid.cellSize * camera.scale;
   ctx.globalAlpha = t;
   ctx.fillStyle = colors.blockedFill;
-  ctx.strokeStyle = colors.down;
-  ctx.lineWidth = Math.max(1.5, 2.5 * camera.scale);
   ctx.beginPath();
-  ctx.rect(p.x - size / 2, p.y - size / 2, size, size);
+  ctx.roundRect(p.x - size / 2, p.y - size / 2, size, size, size * 0.3);
   ctx.fill();
-  ctx.stroke();
   ctx.globalAlpha = 1;
 }
 
@@ -268,9 +477,9 @@ export function terrainStyle(colors, kind) {
   return typeof t === "string" ? { fill: t } : t;
 }
 
-/** Shade everything outside the open part of the map (world.view). */
-function drawClosed(ctx, view, world, camera, colors, shown) {
-  const v = shown ?? world.view;
+/** Shade everything outside the open part of the map (world.view): the ground, a little deeper. */
+function drawClosed(c, env, v) {
+  const { view, camera, colors } = env;
   if (!v) return;
   const a = worldToScreen(camera, v.x, v.y);
   const b = worldToScreen(camera, v.x + v.width, v.y + v.height);
@@ -278,67 +487,197 @@ function drawClosed(ctx, view, world, camera, colors, shown) {
   const y0 = Math.min(a.y, b.y);
   const x1 = Math.max(a.x, b.x);
   const y1 = Math.max(a.y, b.y);
-  ctx.fillStyle = colors.closed;
-  ctx.fillRect(0, 0, view.width, y0);
-  ctx.fillRect(0, y1, view.width, view.height - y1);
-  ctx.fillRect(0, y0, x0, y1 - y0);
-  ctx.fillRect(x1, y0, view.width - x1, y1 - y0);
-  ctx.strokeStyle = colors.closedEdge;
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([6, 6]);
-  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-  ctx.setLineDash([]);
+  c.fillStyle = colors.closed;
+  c.beginPath();
+  c.rect(0, 0, view.width, view.height);
+  // Cut out the open area, with soft rounded corners.
+  c.roundRect(x0, y0, x1 - x0, y1 - y0, Math.min(18, (x1 - x0) / 4));
+  c.fill("evenodd");
 }
 
 /** A faint dot in the middle of every open grid square (stronger while drawing). */
-function drawGrid(ctx, world, camera, colors, k, drawing, shown) {
-  const v = shown ?? world.view;
+function drawGrid(c, env, shown) {
+  const { world, camera, colors, k, ui } = env;
+  const v = shown;
   const open = (x, y) => !v || (x >= v.x && y >= v.y && x <= v.x + v.width && y <= v.y + v.height);
   const { cols, rows } = gridSize(world);
-  ctx.fillStyle = drawing ? colors.gridActive : colors.grid;
+  c.fillStyle = ui.drag ? colors.gridActive : colors.grid;
   const r = THEME.sizes.gridDot * k;
-  ctx.beginPath();
+  c.beginPath();
   for (let cx = 0; cx < cols; cx++) {
     for (let cy = 0; cy < rows; cy++) {
       if (world.terrain?.has(`${cx},${cy}`)) continue;
-      const c = cellCenter(world, { cx, cy });
-      if (!open(c.x, c.y)) continue;
-      const p = worldToScreen(camera, c.x, c.y);
-      ctx.moveTo(p.x + r, p.y);
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      const o = cellCenter(world, { cx, cy });
+      if (!open(o.x, o.y)) continue;
+      const p = worldToScreen(camera, o.x, o.y);
+      c.moveTo(p.x + r, p.y);
+      c.arc(p.x, p.y, r, 0, Math.PI * 2);
     }
   }
-  ctx.fill();
+  c.fill();
 }
 
-function drawBoundaries(ctx, world, camera, colors, k) {
-  ctx.strokeStyle = colors.boundary;
-  ctx.lineWidth = THEME.sizes.boundaryWidth * k;
-  for (const line of world.map.boundaries ?? []) {
-    strokePath(ctx, toScreenPath(camera, line.map(([x, y]) => ({ x, y }))));
+/** Carrier boundaries: soft bands of "security zone" colour; links that cross get rails. */
+function drawBoundaries(c, env) {
+  const { world, camera, colors } = env;
+  const lines = world.map.boundaries ?? [];
+  if (!lines.length) return;
+  c.save();
+  applyCamera(c, camera);
+  c.strokeStyle = colors.boundary;
+  c.lineWidth = world.config.grid.cellSize * 0.62;
+  c.lineCap = "round";
+  c.lineJoin = "round";
+  for (const line of lines) {
+    c.beginPath();
+    line.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+    c.stroke();
   }
+  c.restore();
 }
 
-export function lineColor(line) {
-  return THEME.lineColors[line % THEME.lineColors.length];
+// ---------------------------------------------------------------------------
+// 3–4. Cables.
+
+function cableWidth(env, link) {
+  const { world, T } = env;
+  if (link.backbone) return SIZE.backbone * T;
+  const tiers = world.data.tiers;
+  // T1 (the 1× tier) is the guide's cable width; others scale from it.
+  const base = tiers.find((t) => t.width === 1)?.width ?? 1;
+  return SIZE.cable * T * (tiers[link.tier]?.width ?? 1) / base;
 }
 
+/** Cables that carry the deeper (tier 4) shadow. */
+const raised = (link) => link.backbone || link.leased;
+
+/** How much of a link has snapped in (0–1): each tile segment over cableSnapMs, at most half a second. */
 const firstSeen = new WeakMap();
+function growth(env, link) {
+  const { now } = env;
+  if (!firstSeen.has(link)) firstSeen.set(link, now);
+  const segments = Math.max(1, Math.round(link.length / env.world.config.grid.cellSize));
+  const seconds = Math.min(0.5, (segments * MOTION.cableSnapMs) / 1000);
+  return Math.min(1, (now - firstSeen.get(link)) / seconds);
+}
 
-/** Delivery "pops": a ring that grows and fades where a packet arrived. */
-function drawPops(ctx, pops, now, k) {
-  if (!pops) return;
-  for (const pop of pops) {
-    const t = (now - pop.born) / THEME.popSeconds;
-    if (t < 0 || t > 1) continue;
-    ctx.globalAlpha = 0.5 * (1 - t);
-    ctx.strokeStyle = pop.color;
-    ctx.lineWidth = 2 * k;
-    ctx.beginPath();
-    ctx.arc(pop.x, pop.y, (10 + 16 * t) * k, 0, Math.PI * 2);
-    ctx.stroke();
+function linkState(env, link) {
+  const { ui, world } = env;
+  return {
+    faded: ui.reroute?.linkId === link.id,
+    selected: ui.selectedLinkId === link.id,
+    broken: Boolean(link.down || isBlocked(world, link)),
+  };
+}
+
+/** The cables, drawn to a cached layer: shadows first (by depth tier), then the cables on top. */
+function drawCableLayer(env) {
+  const { world, camera, view, colors, ui } = env;
+  let animating = false;
+  const parts = [colors.theme, world.map?.id, view.width, view.height, view.dpr, camera.scale.toFixed(4), camera.offsetX.toFixed(1), camera.offsetY.toFixed(1), camera.rotated];
+  for (const link of world.links) {
+    const g = growth(env, link);
+    if (g < 1) animating = true;
+    const s = linkState(env, link);
+    parts.push(`${link.id}:${link.tier}:${link.backbone ? 1 : 0}${link.leased ? 1 : 0}${link.firewall ? 1 : 0}${s.broken ? 1 : 0}${s.faded ? 1 : 0}${s.selected ? 1 : 0}:${link.length.toFixed(1)}:${link.path.length}`);
   }
-  ctx.globalAlpha = 1;
+  parts.push(ui.selectedLinkId ?? "");
+  const key = animating ? `anim|${env.now}` : parts.join("|");
+  cachedLayer(env, "cables", key, (c) => paintCables(c, env));
+}
+
+function paintCables(c, env) {
+  const { world, camera, colors, k } = env;
+  const shown = world.links.map((link) => {
+    const g = growth(env, link);
+    const path = g >= 1 ? link.path : partialPath(link.path, link.length * Math.max(0.05, g));
+    return { link, pts: toScreenPath(camera, path), state: linkState(env, link) };
+  });
+  // Selection halo, under everything.
+  for (const { link, pts, state } of shown) {
+    if (!state.selected) continue;
+    c.strokeStyle = colors.highlight;
+    c.lineWidth = cableWidth(env, link) + 14 * k;
+    strokePath(c, pts);
+  }
+  // Shadows: ordinary cables (tier 2), then backbones and leased lines (tier 4).
+  shadowPass(env, c, 2, (sc) => {
+    for (const { link, pts, state } of shown) {
+      if (raised(link) || state.faded) continue;
+      sc.lineWidth = cableWidth(env, link);
+      strokePath(sc, pts);
+    }
+  });
+  // Cables, lowest first so raised ones lie on top.
+  for (const { link, pts, state } of shown) if (!raised(link)) drawCable(c, env, link, null, state.faded ? 0.3 : 1, pts, state);
+  shadowPass(env, c, 4, (sc) => {
+    for (const { link, pts, state } of shown) {
+      if (!raised(link) || state.faded) continue;
+      sc.lineWidth = cableWidth(env, link) + (link.leased && !link.backbone ? 2 * k : 0);
+      strokePath(sc, pts);
+    }
+    for (const { link } of shown) if (link.firewall) firewallShape(sc, env, link);
+  });
+  for (const { link, pts, state } of shown) if (raised(link)) drawCable(c, env, link, null, state.faded ? 0.3 : 1, pts, state);
+  for (const { link } of shown) if (link.firewall) {
+    c.fillStyle = colors.backbone;
+    firewallShape(c, env, link);
+  }
+}
+
+/**
+ * One cable. Plain links are the light cable colour; backbones are wider
+ * and dark slate; leased lines (across a carrier boundary) get two thin
+ * rails along their edges. A cut or blocked link fades and turns dashed.
+ */
+function drawCable(c, env, link, path, alpha = 1, pts = null, state = null) {
+  const { camera, colors, k } = env;
+  const p = pts ?? toScreenPath(camera, path ?? link.path);
+  const st = state ?? linkState(env, link);
+  const width = cableWidth(env, link);
+  c.globalAlpha = alpha * (st.broken ? 0.55 : 1);
+  if (st.broken) c.setLineDash([width * 1.1, width * 1.3]);
+  if (link.backbone) {
+    c.strokeStyle = colors.backbone;
+    c.lineWidth = width;
+    strokePath(c, p);
+  } else if (link.leased) {
+    const rail = Math.max(1.2, 1.4 * k);
+    c.strokeStyle = colors.backbone;
+    c.lineWidth = width + rail * 2;
+    strokePath(c, p);
+    c.strokeStyle = colors.cable;
+    c.lineWidth = width;
+    strokePath(c, p);
+  } else {
+    c.strokeStyle = colors.cable;
+    c.lineWidth = width;
+    strokePath(c, p);
+  }
+  c.setLineDash([]);
+  c.globalAlpha = 1;
+}
+
+/** A firewall: a small flat gate across the cable, a third of the way along. */
+function firewallShape(c, env, link) {
+  const { camera, T } = env;
+  const d = link.length * 0.3;
+  const a = pointAlong(link.path, d - 2);
+  const b = pointAlong(link.path, d + 2);
+  const m = pointAlong(link.path, d);
+  const sa = worldToScreen(camera, a.x, a.y);
+  const sb = worldToScreen(camera, b.x, b.y);
+  const sm = worldToScreen(camera, m.x, m.y);
+  const angle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
+  const along = Math.max(5, 0.28 * T);
+  const across = Math.max(cableWidth(env, link) + 6, 0.8 * T);
+  c.save();
+  c.translate(sm.x, sm.y);
+  c.rotate(angle);
+  c.beginPath();
+  c.roundRect(-along / 2, -across / 2, along, across, along / 2);
+  c.fill();
+  c.restore();
 }
 
 /** The first `length` world units of a path. */
@@ -359,112 +698,60 @@ function partialPath(points, length) {
   return out;
 }
 
-function linkWidth(world, link, k) {
-  const tiers = world.data.tiers;
-  return THEME.sizes.linkWidth * (link.backbone ? tiers.at(-1).width * 1.15 : tiers[link.tier].width) * k;
-}
-
-function drawLinks(ctx, world, camera, colors, k, ui, now) {
-  for (const link of world.links) drawLink(ctx, world, camera, colors, k, ui, now, link);
-}
-
-function drawLink(ctx, world, camera, colors, k, ui, now, link) {
-  // Animate in real time, so links drawn while paused still finish drawing.
-  if (!firstSeen.has(link)) firstSeen.set(link, now);
-  const grow = (now - firstSeen.get(link)) / THEME.linkAppearSeconds;
-  const pts = toScreenPath(camera, grow >= 1 ? link.path : partialPath(link.path, link.length * Math.max(0.05, grow)));
-  const width = linkWidth(world, link, k);
-  const faded = ui.reroute?.linkId === link.id;
-  const selected = ui.selectedLinkId === link.id;
-  const blocked = isBlocked(world, link);
-  if (selected) {
-    ctx.strokeStyle = colors.highlight;
-    ctx.lineWidth = width + 12 * k;
-    strokePath(ctx, pts);
+/** The middle `length` world units of a path (a removed cable shrinking to its midpoint). */
+function middlePath(points, total, length) {
+  const start = (total - length) / 2;
+  const out = [];
+  let walked = 0;
+  out.push(pointAlong(points, start));
+  for (let i = 1; i < points.length; i++) {
+    walked += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    if (walked > start && walked < start + length) out.push(points[i]);
   }
-  // A thin background-coloured outline keeps crossing lines readable.
-  ctx.strokeStyle = colors.background;
-  ctx.lineWidth = width + 3 * k;
-  strokePath(ctx, pts);
-  ctx.globalAlpha = faded ? 0.3 : link.down || blocked ? 0.45 : 1;
-  ctx.strokeStyle = lineColor(link.line);
-  ctx.lineWidth = width;
-  if (link.down || blocked) ctx.setLineDash([width * 1.4, width * 1.2]);
-  strokePath(ctx, pts);
-  ctx.setLineDash([]);
-  if (link.backbone) {
-    // Backbones look like an express road: a dashed centre line.
-    ctx.strokeStyle = colors.leasedStripe;
-    ctx.lineWidth = Math.max(1.4, width * 0.16);
-    ctx.setLineDash([width * 0.9, width * 0.7]);
-    strokePath(ctx, pts);
-    ctx.setLineDash([]);
-  } else if (link.leased) {
-    // Leased lines get a double-rail look.
-    ctx.strokeStyle = colors.leasedStripe;
-    ctx.lineWidth = Math.max(1.2, width * 0.28);
-    strokePath(ctx, pts);
+  out.push(pointAlong(points, start + length));
+  return out;
+}
+
+/** Removed links shrink to their midpoints over cableRemoveMs. */
+let lastLinks = { world: null, byId: new Map() };
+const removing = [];
+function drawRemovedLinks(env) {
+  const { world, now, ctx } = env;
+  if (lastLinks.world !== world) {
+    lastLinks = { world, byId: new Map() };
+    removing.length = 0;
   }
-  ctx.globalAlpha = 1;
-  const mid = worldToScreen(camera, ...xy(pointAlong(link.path, link.length / 2)));
-  if (link.firewall) {
-    const p = worldToScreen(camera, ...xy(pointAlong(link.path, link.length * 0.3)));
-    drawFirewall(ctx, colors, p.x, p.y, k);
+  const seen = new Map();
+  for (const link of world.links) seen.set(link.id, link);
+  for (const [id, link] of lastLinks.byId) if (!seen.has(id)) removing.push({ link, born: now });
+  lastLinks.byId = seen;
+  for (let i = removing.length - 1; i >= 0; i--) {
+    const r = removing[i];
+    const t = (now - r.born) / (MOTION.cableRemoveMs / 1000);
+    if (t >= 1 || t < 0) {
+      removing.splice(i, 1);
+      continue;
+    }
+    const path = middlePath(r.link.path, r.link.length, r.link.length * (1 - t));
+    drawCable(ctx, env, r.link, path, 1 - t * 0.5, null, { faded: false, selected: false, broken: false });
   }
-  if (link.down) drawBadge(ctx, mid.x, mid.y, 7 * k, colors.down, "×");
-  else if (blocked) drawBadge(ctx, mid.x, mid.y, 7 * k, colors.blocked, "!");
 }
 
-const xy = (p) => [p.x, p.y];
-
-function drawBadge(ctx, x, y, r, fill, text) {
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.font = `700 ${Math.round(r * 1.5)}px system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, x, y + 0.5);
-}
-
-/** A tiny brick wall. */
-function drawFirewall(ctx, colors, x, y, k) {
-  const w = 12 * k;
-  const h = 9 * k;
-  ctx.fillStyle = colors.firewall;
-  ctx.beginPath();
-  ctx.roundRect(x - w / 2, y - h / 2, w, h, 2 * k);
-  ctx.fill();
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 1.2 * k;
-  ctx.beginPath();
-  ctx.moveTo(x - w / 2, y);
-  ctx.lineTo(x + w / 2, y);
-  ctx.moveTo(x, y - h / 2);
-  ctx.lineTo(x, y);
-  ctx.moveTo(x - w / 4, y);
-  ctx.lineTo(x - w / 4, y + h / 2);
-  ctx.moveTo(x + w / 4, y);
-  ctx.lineTo(x + w / 4, y + h / 2);
-  ctx.stroke();
-}
-
-function drawDropTarget(ctx, world, camera, colors, target, k) {
+function drawDropTarget(env, target) {
+  const { ctx, world, camera, colors, k } = env;
   ctx.strokeStyle = colors.dropTarget;
   ctx.fillStyle = colors.dropTarget;
   if (target.kind === "link") {
     const link = world.linkById.get(target.id);
     if (!link) return;
-    ctx.lineWidth = linkWidth(world, link, k) + 14 * k;
+    ctx.lineWidth = cableWidth(env, link) + 14 * k;
     strokePath(ctx, toScreenPath(camera, link.path));
   } else if (target.kind === "site") {
     const site = world.siteById.get(target.id);
     if (!site) return;
     const p = worldToScreen(camera, site.x, site.y);
     ctx.beginPath();
-    ctx.arc(p.x, p.y, siteRadiusPx(world, site, camera) * 2, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, siteRadiusPx(world, site, camera) * 1.6, 0, Math.PI * 2);
     ctx.fill();
   } else if (target.kind === "spot") {
     const p = worldToScreen(camera, target.x, target.y);
@@ -475,19 +762,30 @@ function drawDropTarget(ctx, world, camera, colors, target, k) {
 }
 
 /** The link being drawn: its squares so far, and how many links it uses. */
-function drawPreview(ctx, world, camera, drag, k) {
+function drawPreview(env, drag) {
+  const { ctx, world, camera, colors, k, T } = env;
   const from = world.siteById.get(drag.fromSiteId);
   if (!from || !drag.pointerWorld || !drag.cells) return;
-  const color = lineColor(drag.line);
   const pts = toScreenPath(camera, cellsToPath(world, drag.cells));
-  ctx.strokeStyle = color;
-  ctx.lineWidth = THEME.sizes.linkWidth * k;
-  ctx.globalAlpha = 0.7;
-  if (pts.length > 1) strokePath(ctx, pts);
+  const width = SIZE.cable * T;
+  if (pts.length > 1) {
+    // A cable lifted off the map: a soft shadow, then the cable.
+    ctx.globalAlpha = SHADOW.alpha[env.mode];
+    ctx.strokeStyle = SHADOW.rgb[env.mode];
+    ctx.lineWidth = width;
+    ctx.save();
+    ctx.translate(1.5, 4);
+    strokePath(ctx, pts);
+    ctx.restore();
+    ctx.globalAlpha = 0.92;
+    ctx.strokeStyle = colors.cable;
+    strokePath(ctx, pts);
+  }
   // A thin guide from the end of the path to the pointer.
   const end = pts.at(-1);
   const pointer = worldToScreen(camera, drag.pointerWorld.x, drag.pointerWorld.y);
-  ctx.globalAlpha = 0.35;
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = colors.preview;
   ctx.lineWidth = 2 * k;
   strokePath(ctx, [end, pointer]);
   ctx.globalAlpha = 1;
@@ -497,67 +795,202 @@ function drawPreview(ctx, world, camera, drag, k) {
     const r = 11 * k;
     const bx = end.x + 16 * k;
     const by = end.y - 16 * k;
-    ctx.fillStyle = drag.cells.length > world.inventory.links ? "#e8483f" : color;
+    const over = drag.cells.length > world.inventory.links;
+    ctx.fillStyle = over ? nodeColor("red", colors.theme) : colors.removeFill;
     ctx.beginPath();
     ctx.arc(bx, by, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `700 ${Math.round(11 * k)}px system-ui, sans-serif`;
+    ctx.fillStyle = over ? "#ffffff" : colors.removeText;
+    ctx.font = `600 ${Math.round(11 * k)}px "DM Sans", system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(String(used), bx, by + 0.5);
   }
 }
 
-function drawReroute(ctx, world, camera, reroute, k) {
+function drawReroute(env, reroute) {
+  const { ctx, world, camera, colors, T } = env;
   const link = world.linkById.get(reroute.linkId);
   if (!link || !reroute.pointerWorld) return;
   const a = world.siteById.get(link.a);
   const b = world.siteById.get(link.b);
   const p = cellOf(world, reroute.pointerWorld.x, reroute.pointerWorld.y);
-  ctx.globalAlpha = 0.6;
-  ctx.strokeStyle = lineColor(link.line);
-  ctx.lineWidth = THEME.sizes.linkWidth * k;
+  ctx.globalAlpha = 0.75;
+  ctx.strokeStyle = colors.preview;
+  ctx.lineWidth = SIZE.cable * T;
   strokePath(ctx, toScreenPath(camera, cellsToPath(world, straightCells(cellOf(world, a.x, a.y), p))));
   strokePath(ctx, toScreenPath(camera, cellsToPath(world, straightCells(p, cellOf(world, b.x, b.y)))));
   ctx.globalAlpha = 1;
 }
 
-function drawPacketShape(ctx, shape, x, y, r) {
+// ---------------------------------------------------------------------------
+// 5–6. Sites.
+
+/** A colour mixed toward white. */
+const lighten = (c, t) => mixColor(c, "#ffffff", t);
+
+/**
+ * Draw one site from its sprite.
+ *   workstation  a rounded square with a lighter "monitor" in its top half
+ *                (two side by side once it has grown)
+ *   server       a rounded rectangle with thin rack-unit stripes
+ *   switch       a roundabout: a ring the width of a cable round an island
+ *                of ground; a core router's ring is dark slate
+ */
+function drawSite(env, site) {
+  const { ctx, world, camera, ui, colors, mode, view, P } = env;
+  const { x, y } = worldToScreen(camera, site.x, site.y);
+  // New sites pop in: scale 0 → 1.08 → 1 with an ease-out-back.
+  const age = (world.time - site.born) / (MOTION.spawnMs / 1000);
+  const grow = site.born === 0 || age >= 1 ? 1 : Math.max(0, easeOutBack(Math.max(0, age)));
+  if (grow <= 0.01) return;
+  const box = siteBox(world, site, camera);
+  const color = siteColor(world, site, colors);
+  const highlighted = ui.hoverSiteId === site.id || ui.drag?.fromSiteId === site.id || ui.reroute?.overSiteId === site.id || ui.selectedSiteId === site.id;
+  if (highlighted) {
+    ctx.fillStyle = colors.highlight;
+    ctx.beginPath();
+    ctx.arc(x, y, (Math.max(box.w, box.h) / 2 + 0.45 * P) * grow, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  let s;
+  if (box.form === "switch") {
+    // The island shows the ground (and hides the cables meeting under it).
+    ctx.fillStyle = mixColor(colors.background, colors.nightBackground, Math.round(nightAmount(world) * 40) / 40 * colors.nightDepth);
+    ctx.beginPath();
+    ctx.arc(x, y, (box.w / 2) * grow, 0, Math.PI * 2);
+    ctx.fill();
+    const ring = Math.max(3, SIZE.cable * env.T * (site.core ? 1.5 : 1));
+    s = sprite(`switch:${color}`, box.w, box.h, 3, mode, view.dpr, (c, w) => {
+      c.fillStyle = color;
+      c.beginPath();
+      c.arc(0, 0, w / 2, 0, Math.PI * 2);
+      c.arc(0, 0, Math.max(1, w / 2 - ring), 0, Math.PI * 2, true);
+      c.fill("evenodd");
+    });
+  } else if (box.form === "server") {
+    const stripes = box.h > box.w * 0.7 ? 3 : 2;
+    s = sprite(`server:${color}:${stripes}`, box.w, box.h, 3, mode, view.dpr, (c, w, h, noShadow) => {
+      c.fillStyle = color;
+      c.beginPath();
+      c.roundRect(-w / 2, -h / 2, w, h, box.radius);
+      c.fill();
+      noShadow();
+      c.fillStyle = lighten(color, 0.18);
+      const inset = w * 0.16;
+      const gap = h / (stripes + 1);
+      for (let i = 1; i <= stripes; i++) c.fillRect(-w / 2 + inset, -h / 2 + gap * i - 1, w - inset * 2, 2);
+    });
+  } else {
+    const monitors = site.grown ? 2 : 1;
+    s = sprite(`ws:${color}:${monitors}`, box.w, box.h, 2, mode, view.dpr, (c, w, h, noShadow) => {
+      c.fillStyle = color;
+      c.beginPath();
+      c.roundRect(-w / 2, -h / 2, w, h, box.radius);
+      c.fill();
+      noShadow();
+      c.fillStyle = lighten(color, 0.25);
+      const top = -h / 2 + h * 0.18;
+      const mh = h * 0.32;
+      if (monitors === 1) {
+        c.beginPath();
+        c.roundRect(-w * 0.28, top, w * 0.56, mh, Math.min(2, mh / 3));
+        c.fill();
+      } else {
+        for (const sx of [-1, 1]) {
+          c.beginPath();
+          c.roundRect(sx > 0 ? w * 0.04 : -w * 0.34, top, w * 0.3, mh, Math.min(2, mh / 3));
+          c.fill();
+        }
+      }
+    });
+  }
+  if (s) drawSprite(ctx, s, x, y, grow);
+  if (box.form === "switch" && site.qos) drawQosLight(env, x + box.w * 0.42, y - box.h * 0.42);
+  if (site.sdwan) {
+    // An SD-WAN box: a small slate tab on the top-left corner.
+    const d = Math.max(5, 0.22 * P);
+    const bx = x - box.w / 2 + d * 0.1;
+    const by = y - box.h / 2 - d * 0.55;
+    ctx.fillStyle = SHADOW.color[mode];
+    ctx.beginPath();
+    ctx.roundRect(bx + 0.5, by + 1, d * 1.4, d, d / 2);
+    ctx.fill();
+    ctx.fillStyle = colors.backbone;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, d * 1.4, d, d / 2);
+    ctx.fill();
+  }
+}
+
+/** A QoS policy: a small three-dot "traffic light" by the switch. */
+function drawQosLight(env, x, y) {
+  const { ctx, colors, mode, P } = env;
+  const d = Math.max(3, 0.13 * P);
+  const w = d * 1.9;
+  const h = d * 4.6;
+  ctx.fillStyle = SHADOW.color[mode];
   ctx.beginPath();
-  switch (shape) {
-    case "square":
-      ctx.rect(x - r, y - r, r * 2, r * 2);
-      break;
-    case "triangle":
-      ctx.moveTo(x, y - r * 1.2);
-      ctx.lineTo(x + r * 1.1, y + r * 0.8);
-      ctx.lineTo(x - r * 1.1, y + r * 0.8);
-      ctx.closePath();
-      break;
-    case "diamond":
-      ctx.moveTo(x, y - r * 1.25);
-      ctx.lineTo(x + r * 1.25, y);
-      ctx.lineTo(x, y + r * 1.25);
-      ctx.lineTo(x - r * 1.25, y);
-      ctx.closePath();
-      break;
-    default:
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-  }
+  ctx.roundRect(x - w / 2 + 0.5, y - h / 2 + 1, w, h, w / 2);
   ctx.fill();
-}
-
-function drawTravellingPackets(ctx, world, camera, k) {
-  for (const p of travellingPacketSpots(world, camera, k)) {
-    const traffic = world.data.traffic[p.packet.traffic];
-    ctx.fillStyle = traffic.color;
-    drawPacketShape(ctx, traffic.shape, p.x, p.y, p.r);
+  ctx.fillStyle = colors.backbone;
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2, y - h / 2, w, h, w / 2);
+  ctx.fill();
+  ctx.fillStyle = colors.cable;
+  for (const dy of [-1.35, 0, 1.35]) {
+    ctx.beginPath();
+    ctx.arc(x, y + dy * d, d * 0.42, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
-/** Where each travelling packet is drawn on screen: [{ packet, x, y, r }]. */
-function travellingPacketSpots(world, camera, k) {
+// ---------------------------------------------------------------------------
+// 7. Packets.
+
+/** A pill centred on (x, y), turned to `angle`. */
+function pill(ctx, x, y, w, h, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (angle) ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, -h / 2, w, h, h / 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Pill length for a packet: bigger (more bandwidth) packets are a little longer. */
+function packetSize(world, packet, P) {
+  const t = world.data.traffic[packet.traffic];
+  const f = Math.min(1.45, Math.max(0.85, 0.8 + 0.2 * (t?.size ?? 1)));
+  return { w: SIZE.packet.w * P * f, h: SIZE.packet.h * P };
+}
+
+/** Draw packet pills with a cheap tier-1 shadow: all shadows first, then the pills. */
+function drawPills(env, spots) {
+  const { ctx, mode, world, colors } = env;
+  const t = SHADOW.tier[1];
+  ctx.fillStyle = SHADOW.color[mode];
+  for (const s of spots) pill(ctx, s.x + t.x, s.y + t.y, s.w * s.scale, s.h * s.scale, s.angle);
+  for (const s of spots) {
+    ctx.fillStyle = trafficColor(world, s.packet.traffic, colors);
+    pill(ctx, s.x, s.y, s.w * s.scale, s.h * s.scale, s.angle);
+  }
+}
+
+function drawPackets(env) {
+  const { world, camera } = env;
+  const byId = new Map();
+  for (const p of world.packets) byId.set(p.id, p);
+  const spots = [];
+  for (const site of world.sites) spots.push(...queuedPacketSpots(world, camera, site, byId));
+  spots.push(...travellingPacketSpots(world, camera));
+  drawPills(env, spots);
+}
+
+/** Where each travelling packet is drawn on screen: [{ packet, x, y, r, w, h, angle, scale }]. */
+function travellingPacketSpots(world, camera) {
+  const P = pieceTile(world, camera);
   const out = [];
   for (const packet of world.packets) {
     if (packet.linkId === null) continue;
@@ -565,30 +998,103 @@ function travellingPacketSpots(world, camera, k) {
     if (!link) continue;
     const dist = packet.dir === 0 ? packet.progress : link.length - packet.progress;
     const p = pointAlong(link.path, dist);
+    const a = worldToScreen(camera, ...xy(pointAlong(link.path, dist - 1)));
+    const b = worldToScreen(camera, ...xy(pointAlong(link.path, dist + 1)));
     const s = worldToScreen(camera, p.x, p.y);
-    const traffic = world.data.traffic[packet.traffic];
-    out.push({ packet, x: s.x, y: s.y, r: THEME.sizes.packetRadius * k * Math.sqrt(traffic.size) });
+    const { w, h } = packetSize(world, packet, P);
+    const spot = { packet, x: s.x, y: s.y, r: w / 2, w, h, angle: Math.atan2(b.y - a.y, b.x - a.x), scale: 1 };
+    // Inside a switch, go round the ring instead of across the island.
+    roundabout(world, camera, link, dist, packet.dir, spot);
+    out.push(spot);
   }
   return out;
 }
 
-/** Where a site's waiting packets are drawn: [{ packet, x, y, r }] (at most three rows of six). */
-function queuedPacketSpots(world, camera, site, k, byId) {
+/** Packets go round a switch's ring anticlockwise, a quarter turn in and a quarter turn out. */
+const RING_SWEEP = Math.PI / 2;
+function roundabout(world, camera, link, dist, dir, spot) {
+  for (const [end, fromEnd, arriving] of [
+    [link.a, dist, dir === 1],
+    [link.b, link.length - dist, dir === 0],
+  ]) {
+    const site = world.siteById.get(end);
+    if (!site || siteForm(world.data.sites[site.type]) !== "switch") continue;
+    const box = siteBox(world, site, camera);
+    const c = worldToScreen(camera, site.x, site.y);
+    const R = box.w / 2;
+    const d = Math.hypot(spot.x - c.x, spot.y - c.y);
+    if (d >= R) continue;
+    // Where the link meets the ring.
+    const edgeDist = Math.min(link.length, R / camera.scale);
+    const e = pointAlong(link.path, end === link.a ? edgeDist : link.length - edgeDist);
+    const es = worldToScreen(camera, e.x, e.y);
+    const theta = Math.atan2(es.y - c.y, es.x - c.x);
+    const ring = Math.max(3, SIZE.cable * tilePx(world, camera) * (site.core ? 1.5 : 1));
+    const rc = R - ring / 2;
+    const f = Math.min(1, Math.max(0, fromEnd * camera.scale / R));
+    // Anticlockwise on screen is a falling angle.
+    const phi = arriving ? theta - (1 - f) * RING_SWEEP : theta + (1 - f) * RING_SWEEP;
+    spot.x = c.x + Math.cos(phi) * rc;
+    spot.y = c.y + Math.sin(phi) * rc;
+    spot.angle = phi - Math.PI / 2;
+    return;
+  }
+}
+
+const xy = (p) => [p.x, p.y];
+
+/**
+ * Where a site's waiting packets are drawn: [{ packet, x, y, r, w, h, angle, scale }].
+ * They park bumper to bumper (MOTION.queueGap apart) in rows beside the
+ * site, at most three rows; at a switch they queue round the ring.
+ */
+function queuedPacketSpots(world, camera, site, byId) {
   if (site.queue.length === 0) return [];
+  const P = pieceTile(world, camera);
   const { x, y } = worldToScreen(camera, site.x, site.y);
-  const r = siteRadiusPx(world, site, camera);
-  const pr = THEME.sizes.packetRadius * k;
-  const gap = pr * 2.6;
-  const perRow = 6;
-  // Show at most three rows; a long queue is already shouting via its ring.
+  const box = siteBox(world, site, camera);
+  const gap = MOTION.queueGap * P;
   const out = [];
-  site.queue.slice(0, perRow * 3).forEach((id, i) => {
+  if (box.form === "switch") {
+    // Round the ring, like cars waiting on a roundabout.
+    let ring = box.w / 2 + SIZE.packet.h * P * 0.9;
+    let angle = -Math.PI / 2;
+    for (const id of site.queue.slice(0, 40)) {
+      const packet = byId.get(id);
+      if (!packet) continue;
+      const { w, h } = packetSize(world, packet, P);
+      const step = (w + gap) / ring;
+      if (angle + step > Math.PI * 1.5) {
+        ring += h + gap * 2;
+        angle = -Math.PI / 2;
+      }
+      const a = angle + step / 2;
+      out.push({ packet, x: x + Math.cos(a) * ring, y: y + Math.sin(a) * ring, r: w / 2, w, h, angle: a + Math.PI / 2, scale: 1 });
+      angle += step;
+    }
+    return out;
+  }
+  const perRow = 5;
+  const rows = 3;
+  const h = SIZE.packet.h * P;
+  const startX = x + box.w / 2 + 0.28 * P;
+  const top = y - ((Math.min(rows, Math.ceil(site.queue.length / perRow)) - 1) * (h + gap * 2)) / 2;
+  let cx = startX;
+  let row = 0;
+  let inRow = 0;
+  for (const id of site.queue.slice(0, perRow * rows)) {
     const packet = byId.get(id);
-    if (!packet) return;
-    const col = i % perRow;
-    const row = Math.floor(i / perRow);
-    out.push({ packet, x: x + r + gap * 0.9 + col * gap, y: y - r * 0.6 + row * gap, r: pr });
-  });
+    if (!packet) continue;
+    if (inRow === perRow) {
+      row++;
+      inRow = 0;
+      cx = startX;
+    }
+    const { w } = packetSize(world, packet, P);
+    out.push({ packet, x: cx + w / 2, y: top + row * (h + gap * 2), r: w / 2, w, h, angle: 0, scale: 1 });
+    cx += w + gap;
+    inRow++;
+  }
   return out;
 }
 
@@ -597,11 +1103,10 @@ function queuedPacketSpots(world, camera, site, k, byId) {
  * queue), within `radius` px of its edge, or null. For tap-to-explain.
  */
 export function packetAt(world, camera, p, radius) {
-  const k = uiScale(camera);
   const byId = new Map();
   for (const q of world.packets) byId.set(q.id, q);
-  const spots = travellingPacketSpots(world, camera, k);
-  for (const site of world.sites) spots.push(...queuedPacketSpots(world, camera, site, k, byId));
+  const spots = travellingPacketSpots(world, camera);
+  for (const site of world.sites) spots.push(...queuedPacketSpots(world, camera, site, byId));
   let best = null;
   let bestD = Infinity;
   for (const s of spots) {
@@ -614,32 +1119,95 @@ export function packetAt(world, camera, p, radius) {
   return best;
 }
 
-/** The ring timer: fills clockwise from the top as the site stays overloaded. */
-function drawOverload(ctx, world, camera, colors, site, k, now) {
+/** A delivered packet shrinks into the site it reached. */
+function drawPops(env, pops) {
+  if (!pops) return;
+  const { world, P, now } = env;
+  const spots = [];
+  for (const pop of pops) {
+    if (!pop.traffic) continue;
+    const t = (now - pop.born) / (MOTION.deliverMs / 1000);
+    if (t < 0 || t > 1) continue;
+    const { w, h } = packetSize(world, { traffic: pop.traffic }, P);
+    spots.push({ packet: { traffic: pop.traffic }, x: pop.x, y: pop.y, w, h, angle: 0, scale: 1 - t });
+  }
+  if (spots.length) drawPills(env, spots);
+}
+
+// ---------------------------------------------------------------------------
+// 8. Ticket pins and ring timers.
+
+/** When each of a site's pins appeared (real time), so new ones can pop in. */
+const pinTimes = new WeakMap();
+
+/**
+ * Hunger as ticket pins: a tidy row of small circles above a district hub,
+ * one per pip, each with a white dot in the middle. They pop in (scale
+ * 0 → 1 with a small upward settle) as the hub waits for deliveries.
+ */
+function drawPins(env, site) {
+  const { ctx, world, camera, colors, mode, P, now } = env;
+  const def = world.data.sites[site.type];
+  if (!def.hungry) return;
+  const max = world.config.hunger.maxPips;
+  const full = Math.min(max, Math.floor(site.hunger));
+  let times = pinTimes.get(site);
+  if (!times) pinTimes.set(site, (times = []));
+  while (times.length < full) times.push(now);
+  times.length = full;
+  if (full === 0) return;
+  const { x, y } = worldToScreen(camera, site.x, site.y);
+  const box = siteBox(world, site, camera);
+  const d = SIZE.pin * P;
+  const gap = d * 0.35;
+  const startX = x - ((full - 1) * (d + gap)) / 2;
+  const py = y - box.h / 2 - d * 0.95;
+  const color = ringColor(world, site, colors);
+  const t1 = SHADOW.tier[1];
+  for (let i = 0; i < full; i++) {
+    const t = Math.min(1, (now - times[i]) / (MOTION.pinMs / 1000));
+    const scale = t;
+    const lift = (1 - t) * 2;
+    const px = startX + i * (d + gap);
+    const r = (d / 2) * scale;
+    if (r <= 0.2) continue;
+    ctx.fillStyle = SHADOW.color[mode];
+    ctx.beginPath();
+    ctx.arc(px + t1.x, py + lift + t1.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(px, py + lift, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(px, py + lift, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/**
+ * The ring timer: fills clockwise from the top as the site stays
+ * overloaded. From 75% full it pulses (opacity 60% ↔ 100%, once a second):
+ * the only thing on the map that flashes.
+ */
+function drawRing(env, site) {
+  const { ctx, world, camera, colors, P, now } = env;
   if (site.overload <= 0) return;
   const { x, y } = worldToScreen(camera, site.x, site.y);
-  const r = siteRadiusPx(world, site, camera) * 1.85;
+  const box = siteBox(world, site, camera);
+  const r = box.form === "switch" ? box.w / 2 + SIZE.ringGap * P : Math.hypot(box.w, box.h) / 2 + SIZE.ringGap * P;
   const fraction = Math.min(1, site.overload / world.config.overload.seconds);
-  const almostFull = world.outages && fraction >= (world.config.overload.warnAt ?? 0.7);
-  // A slow, soft breathing pulse; a little quicker as the timer fills, and
-  // quick once the site is almost full.
-  const pulse = 0.5 + 0.5 * Math.sin(now * (almostFull ? 9 : 2.2 + fraction * 2.5));
-  if (almostFull) {
-    // A soft red glow behind the ring, breathing with it.
-    ctx.globalAlpha = 0.25 * pulse;
-    ctx.fillStyle = colors.overload;
-    ctx.beginPath();
-    ctx.arc(x, y, r + THEME.sizes.overloadRing * k, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  ctx.lineWidth = THEME.sizes.overloadRing * k;
-  ctx.strokeStyle = colors.overloadTrack;
+  const width = SIZE.ringWidth * Math.max(1, P / 32);
+  const color = ringColor(world, site, colors);
+  ctx.lineWidth = width;
+  ctx.strokeStyle = colors.ringTrack;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.globalAlpha = 0.65 + 0.35 * pulse;
-  ctx.strokeStyle = colors.overload;
+  ctx.globalAlpha = fraction >= MOTION.slaPulseAt ? 0.8 + 0.2 * Math.sin(now * Math.PI * 2) : 1;
+  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
   ctx.beginPath();
   ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2);
   ctx.stroke();
@@ -667,244 +1235,43 @@ export function offscreenArrow(view, insets, p, margin) {
   return { x: cx + dx * t, y: cy + dy * t, angle: Math.atan2(dy, dx) };
 }
 
-/** Arrows at the screen edge pointing to off-screen sites whose ring is filling. */
-function drawOffscreenArrows(ctx, view, world, camera, colors, insets, k, now) {
+/** Arrows at the screen edge pointing to off-screen sites whose ring is filling, in the site's colour. */
+function drawOffscreenArrows(env, insets) {
+  const { ctx, view, world, camera, colors, mode, k } = env;
   const size = 11 * k;
   for (const site of world.sites) {
     if (site.overload <= 0) continue;
     const p = worldToScreen(camera, site.x, site.y);
     const a = offscreenArrow(view, insets, p, size * 1.6);
     if (!a) continue;
-    const fraction = Math.min(1, site.overload / world.config.overload.seconds);
-    const pulse = 0.5 + 0.5 * Math.sin(now * (3 + fraction * 6));
     ctx.save();
     ctx.translate(a.x, a.y);
     ctx.rotate(a.angle);
-    ctx.globalAlpha = 0.75 + 0.25 * pulse;
-    ctx.fillStyle = colors.overload;
-    ctx.strokeStyle = colors.siteOutline;
-    ctx.lineWidth = 2 * k;
-    ctx.beginPath();
-    ctx.moveTo(size, 0);
-    ctx.lineTo(-size * 0.7, -size * 0.75);
-    ctx.lineTo(-size * 0.35, 0);
-    ctx.lineTo(-size * 0.7, size * 0.75);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-function drawSite(ctx, world, camera, colors, site, ui, k) {
-  const def = world.data.sites[site.type];
-  const { x, y } = worldToScreen(camera, site.x, site.y);
-  // New sites grow in with a little overshoot.
-  const age = (world.time - site.born) / THEME.siteAppearSeconds;
-  const grow = site.born === 0 || age >= 1 ? 1 : easeOutBack(Math.max(0, age));
-  const r = siteRadiusPx(world, site, camera) * grow;
-  if (r <= 0.1) return;
-  const highlighted =
-    ui.hoverSiteId === site.id ||
-    ui.drag?.fromSiteId === site.id ||
-    ui.reroute?.overSiteId === site.id ||
-    ui.selectedSiteId === site.id;
-  if (site.jam > 0.02 && !site.core) {
-    // A jammed switch glows amber, pulsing gently, so you can spot the bottleneck.
-    const pulse = 0.75 + 0.25 * Math.sin(world.time * 5);
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, site.jam) * pulse;
-    ctx.fillStyle = colors.jam;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = colors.firewall;
-    ctx.lineWidth = 2.5 * k;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-  if (highlighted) {
-    ctx.fillStyle = colors.highlight;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 1.9, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.beginPath();
-  switch (def.shape) {
-    case "hub": {
-      const s = r * 1.05;
-      ctx.roundRect(x - s, y - s, s * 2, s * 2, s * 0.35);
-      break;
-    }
-    case "square":
-      ctx.rect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8);
-      break;
-    case "triangle":
-      ctx.moveTo(x, y - r * 1.15);
-      ctx.lineTo(x + r * 1.1, y + r * 0.8);
-      ctx.lineTo(x - r * 1.1, y + r * 0.8);
-      ctx.closePath();
-      break;
-    case "edge":
-      for (let i = 0; i < 6; i++) {
-        const a = Math.PI / 6 + (i * Math.PI) / 3;
-        ctx[i === 0 ? "moveTo" : "lineTo"](x + Math.cos(a) * r * 1.1, y + Math.sin(a) * r * 1.1);
-      }
-      ctx.closePath();
-      break;
-    case "cloud":
-      ctx.arc(x - r * 0.45, y + r * 0.15, r * 0.55, Math.PI * 0.5, Math.PI * 1.5);
-      ctx.arc(x, y - r * 0.2, r * 0.65, Math.PI, Math.PI * 2);
-      ctx.arc(x + r * 0.5, y + r * 0.15, r * 0.55, Math.PI * 1.5, Math.PI * 0.5);
-      ctx.closePath();
-      break;
-    case "district": {
-      // A rounded square with a notch of a roof: a hub for one kind of site.
-      const s = r * 1.05;
-      ctx.moveTo(x - s, y - s * 0.55);
-      ctx.lineTo(x, y - s * 1.15);
-      ctx.lineTo(x + s, y - s * 0.55);
-      ctx.lineTo(x + s, y + s * 0.75);
-      ctx.quadraticCurveTo(x + s, y + s, x + s * 0.75, y + s);
-      ctx.lineTo(x - s * 0.75, y + s);
-      ctx.quadraticCurveTo(x - s, y + s, x - s, y + s * 0.75);
-      ctx.closePath();
-      break;
-    }
-    case "switch": {
-      const s = site.core ? r * 1.2 : r;
-      ctx.roundRect(x - s, y - s, s * 2, s * 2, s * 0.45);
-      break;
-    }
-    default:
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-  }
-  // Coloured by type, with a white outline and a soft shadow behind it.
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = colors.siteShadow;
-  ctx.lineWidth = (THEME.sizes.siteStroke + 2) * k;
-  ctx.stroke();
-  ctx.fillStyle = site.core ? colors.core : def.color;
-  ctx.fill();
-  ctx.strokeStyle = colors.siteOutline;
-  ctx.lineWidth = THEME.sizes.siteStroke * k;
-  ctx.stroke();
-  if (def.shape === "switch" && site.core) {
-    // A core router: a ring of ports round a centre.
-    ctx.fillStyle = colors.siteFill;
-    for (let i = 0; i < 6; i++) {
-      const a = (i * Math.PI) / 3;
+    const shape = () => {
       ctx.beginPath();
-      ctx.arc(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62, r * 0.14, 0, Math.PI * 2);
+      ctx.moveTo(size, 0);
+      ctx.lineTo(-size * 0.7, -size * 0.75);
+      ctx.quadraticCurveTo(-size * 0.2, 0, -size * 0.7, size * 0.75);
+      ctx.closePath();
       ctx.fill();
-    }
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.2, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (def.shape === "switch") {
-    // Four little ports.
-    ctx.fillStyle = colors.siteFill;
-    for (const dx of [-0.4, 0.4]) {
-      for (const dy of [-0.4, 0.4]) {
-        ctx.beginPath();
-        ctx.arc(x + dx * r, y + dy * r, r * 0.16, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-  if (site.sdwan) {
-    const bx = x - r * 1.05;
-    const by = y - r * 1.05;
-    ctx.fillStyle = colors.sdwan;
-    ctx.beginPath();
-    ctx.arc(bx, by, 4.5 * k, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = colors.siteFill;
-    ctx.lineWidth = 1.5 * k;
-    ctx.beginPath();
-    ctx.arc(bx, by, 2 * k, Math.PI * 0.2, Math.PI * 1.6);
-    ctx.stroke();
-  }
-  if ((def.shape === "hub" || def.shape === "edge" || def.shape === "district") && site.label) {
-    ctx.fillStyle = colors.hubText;
-    ctx.font = `600 ${Math.round(r * (def.shape === "district" ? 0.62 : 0.75))}px system-ui, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(site.label, x, y + (def.shape === "district" ? r * 0.12 : 0.5));
-  }
-  if (site.grown) {
-    // A grown site gets a second, thin ring in its own colour.
-    ctx.strokeStyle = def.color;
-    ctx.lineWidth = 1.6 * k;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 1.45, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  if (def.hungry) drawHunger(ctx, world, colors, site, x, y, r, k);
-  if (site.qos) {
-    // A QoS policy: a little badge with a "fast lane" chevron, top right.
-    const s = site.core ? r * 1.2 : r;
-    const bx = x + s * 1.05;
-    const by = y - s * 1.05;
-    ctx.fillStyle = colors.qos;
-    ctx.beginPath();
-    ctx.arc(bx, by, 5 * k, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = colors.siteFill;
-    ctx.lineWidth = 1.6 * k;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(bx - 1.8 * k, by - 2.4 * k);
-    ctx.lineTo(bx + 1.4 * k, by);
-    ctx.lineTo(bx - 1.8 * k, by + 2.4 * k);
-    ctx.stroke();
-    ctx.lineCap = "butt";
+    };
+    ctx.fillStyle = SHADOW.color[mode];
+    ctx.translate(1, 2);
+    shape();
+    ctx.translate(-1, -2);
+    ctx.fillStyle = ringColor(world, site, colors);
+    shape();
+    ctx.restore();
   }
 }
 
-/** Hunger pips: a row of dots above a district hub, filling as it waits for deliveries. */
-function drawHunger(ctx, world, colors, site, x, y, r, k) {
-  const max = world.config.hunger.maxPips;
-  const full = Math.floor(site.hunger);
-  if (full === 0 && site.hunger < 0.5) return;
-  const gap = 9 * k;
-  const startX = x - ((max - 1) * gap) / 2;
-  const py = y - r * 1.55;
-  for (let i = 0; i < max; i++) {
-    ctx.beginPath();
-    ctx.arc(startX + i * gap, py, 3.2 * k, 0, Math.PI * 2);
-    if (i < full) {
-      ctx.fillStyle = full >= max ? colors.overload : world.data.sites[site.type].color;
-      ctx.fill();
-    } else {
-      ctx.strokeStyle = world.data.sites[site.type].color;
-      ctx.lineWidth = 1.2 * k;
-      ctx.stroke();
-    }
-  }
-}
-
-function easeOutBack(t) {
-  const c = 1.70158;
-  return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2;
-}
-
-/** Waiting packets sit in a small grid to the right of their site. */
-function drawQueue(ctx, world, camera, site, k) {
-  if (site.queue.length === 0) return;
-  const byId = new Map();
-  for (const p of world.packets) byId.set(p.id, p);
-  for (const p of queuedPacketSpots(world, camera, site, k, byId)) {
-    const traffic = world.data.traffic[p.packet.traffic];
-    ctx.fillStyle = traffic.color;
-    drawPacketShape(ctx, traffic.shape, p.x, p.y, p.r);
-  }
-}
-
-function drawRemoveButton(ctx, camera, colors, { x, y }) {
+function drawRemoveButton(env, { x, y }) {
+  const { ctx, camera, colors, mode } = env;
   const r = removeButtonRadius(camera);
+  ctx.fillStyle = SHADOW.color[mode];
+  ctx.beginPath();
+  ctx.arc(x + 1, y + 2, r, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = colors.removeFill;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { GAME_DATA } from "../data/index.js";
 import { MAPS } from "../data/maps.js";
 import { SITE_TYPES } from "../data/sites.js";
-import { THEME } from "../data/theme.js";
+import { NODE, NODE_ORDER, PALETTES, THEME } from "../data/theme.js";
 import { TRAFFIC_TYPES } from "../data/traffic.js";
 import { validateData } from "../src/data/validate.js";
 import { EFFECT_NAMES } from "../src/sim/events.js";
@@ -76,13 +76,44 @@ export const tests = [
     d.config.growth.types = { lighthouse: 1 };
     assert.ok(validateData(d).some((e) => e.includes('unknown site type "lighthouse"')));
   }],
-  ["theme has line colours", () => {
-    assert.ok(THEME.lineColors.length >= 5);
+  ["the node palette has a day and a night colour for every name, in the guide's order", () => {
+    assert.deepEqual(NODE_ORDER, ["blue", "red", "yellow", "green", "purple", "teal", "orange", "pink"]);
+    for (const set of [NODE.day, NODE.night]) assert.deepEqual(Object.keys(set).sort(), [...NODE_ORDER].sort());
+    for (const name of NODE_ORDER) assert.notEqual(NODE.day[name], NODE.night[name]);
   }],
-  ["every site type has its own fill colour", () => {
+  ["sites and the traffic headed for them share a colour", () => {
+    for (const [id, t] of Object.entries(TRAFFIC_TYPES)) {
+      if (t.junk) assert.equal(t.node, undefined, `${id}: junk stays neutral`);
+      else assert.ok(NODE_ORDER.includes(t.node), `${id} has a node colour`);
+      if (t.to === "site" || !t.node) continue;
+      for (const dest of [t.to].flat()) {
+        const d = SITE_TYPES[dest];
+        if (d.node) assert.equal(d.node, t.node, `${id} → ${dest}`);
+      }
+    }
+    // The data center takes everything, so it's the neutral slate.
+    assert.equal(SITE_TYPES.datacenter.node, undefined);
+  }],
+  ["a bad node colour name is caught", () => {
+    const d = all();
+    d.sites.office.node = "chartreuse";
+    assert.ok(validateData(d).some((e) => e.includes("sites.office.node")));
+  }],
+  ["every map has a ground palette, and every palette its colours", () => {
+    for (const m of MAPS) assert.ok(PALETTES[m.palette], `${m.id} palette`);
+    for (const p of Object.values(PALETTES)) {
+      for (const key of ["ground", "secZone", "wallZone", "park", "cable", "backbone"]) assert.match(p[key], /^#[0-9a-f]{6}$/i);
+    }
+    assert.ok(THEME.light.background && THEME.dark.background);
+  }],
+  ["every site type has a colour, and each kind of sending site its own", () => {
     const colors = Object.values(SITE_TYPES).map((s) => s.color);
     assert.ok(colors.every((c) => typeof c === "string" && c.length > 0));
-    assert.equal(new Set(colors).size, colors.length, "no two types share a colour");
+    // Colour means "who talks to whom", so a district hub shares its senders'
+    // colour, but no two kinds of sender share one.
+    const senders = Object.values(SITE_TYPES).filter((s) => s.packetInterval !== null).map((s) => s.node);
+    assert.ok(senders.every(Boolean));
+    assert.equal(new Set(senders).size, senders.length, "no two kinds of sender share a colour");
   }],
   ["the validator catches a site type without a colour or a tool without a tip", () => {
     const data = all();
