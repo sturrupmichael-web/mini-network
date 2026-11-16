@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createAuth, parseSession } from "../src/online/auth.js";
+import { SITE_KEY, createAuth, parseSession } from "../src/online/auth.js";
 import { cleanName, createLeaderboard } from "../src/online/leaderboard.js";
 import { createStorage } from "../src/storage.js";
 
@@ -30,17 +30,19 @@ function fakeLocation(hash = "", search = "") {
   return { origin: "https://michaelsturrup.com", pathname: "/mini-network/", hash, search, protocol: "https:", assigned: null, assign(u) { this.assigned = u; } };
 }
 
-function setup({ routes = {}, hash = "", session = null } = {}) {
+function setup({ routes = {}, hash = "", session = null, site = memoryBackend() } = {}) {
   const storage = createStorage(memoryBackend());
-  if (session) storage.set("auth", session);
+  if (session) site.setItem(SITE_KEY, JSON.stringify(session));
   const server = fakeServer(routes);
   const location = fakeLocation(hash);
   const replaced = [];
   const history = { replaceState: (_s, _t, url) => replaced.push(url) };
-  const auth = createAuth({ storage, fetch: server.fetch, location, history });
+  const auth = createAuth({ storage, site, fetch: server.fetch, location, history });
   const lb = createLeaderboard({ auth, storage });
-  return { storage, server, location, replaced, auth, lb };
+  return { storage, site, server, location, replaced, auth, lb };
 }
+
+const shared = (site) => JSON.parse(site.getItem(SITE_KEY));
 
 const signedIn = (id = "u1") => parseSession({ access_token: fakeJwt(id), refresh_token: "r1" });
 
@@ -55,11 +57,58 @@ export const tests = [
   }],
   ["the session in the URL hash is kept and the address bar cleaned", () => {
     const token = fakeJwt("user-123");
-    const { auth, replaced, storage } = setup({ hash: `#access_token=${token}&refresh_token=abc&expires_in=3600` });
+    const { auth, replaced, site } = setup({ hash: `#access_token=${token}&refresh_token=abc&expires_in=3600` });
     assert.equal(auth.init(), "signed-in");
     assert.equal(auth.user.id, "user-123");
     assert.deepEqual(replaced, ["https://michaelsturrup.com/mini-network/"]);
-    assert.equal(storage.get("auth").refresh_token, "abc");
+    assert.equal(shared(site).refresh_token, "abc", "kept in the site-wide slot");
+  }],
+  ["a sign-in from the main page (or another game) is picked up", () => {
+    const site = memoryBackend();
+    const { auth } = setup({ site });
+    assert.equal(auth.user, null);
+    site.setItem(SITE_KEY, JSON.stringify(signedIn("from-main-page")));
+    assert.equal(auth.user.id, "from-main-page", "read fresh, not cached at start");
+  }],
+  ["the game's old sign-in moves into the site-wide slot", () => {
+    const site = memoryBackend();
+    const storage = createStorage(memoryBackend());
+    storage.set("auth", signedIn("old"));
+    const auth = createAuth({ storage, site, fetch: async () => ({}), location: fakeLocation(), history: null });
+    assert.equal(auth.user.id, "old");
+    assert.equal(shared(site).user.id, "old");
+    assert.equal(storage.get("auth"), null, "old copy removed");
+  }],
+  ["the old sign-in doesn't replace someone already signed in on the site", () => {
+    const site = memoryBackend();
+    site.setItem(SITE_KEY, JSON.stringify(signedIn("site")));
+    const storage = createStorage(memoryBackend());
+    storage.set("auth", signedIn("old"));
+    const auth = createAuth({ storage, site, fetch: async () => ({}), location: fakeLocation(), history: null });
+    assert.equal(auth.user.id, "site");
+    assert.equal(storage.get("auth"), null);
+  }],
+  ["signing out clears the site-wide slot", () => {
+    const { auth, site } = setup({ session: signedIn() });
+    auth.signOut();
+    assert.equal(site.getItem(SITE_KEY), null);
+    assert.equal(auth.user, null);
+  }],
+  ["a refused refresh uses the session another page just refreshed", async () => {
+    const site = memoryBackend();
+    const { auth } = setup({
+      site,
+      session: { ...signedIn(), expires_at: 10 },
+      routes: {
+        "POST token": () => {
+          // Another tab refreshed first: our refresh token is now used up.
+          site.setItem(SITE_KEY, JSON.stringify({ ...signedIn(), refresh_token: "r-other" }));
+          return [400, { message: "Invalid Refresh Token: Already Used" }];
+        },
+      },
+    });
+    assert.equal(await auth.ensure(), true);
+    assert.equal(shared(site).refresh_token, "r-other", "kept, not signed out");
   }],
   ["a refused sign-in reports the reason", () => {
     const { auth } = setup({ hash: "#error=access_denied&error_description=User+cancelled" });

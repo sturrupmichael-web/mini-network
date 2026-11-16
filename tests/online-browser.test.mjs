@@ -111,6 +111,22 @@ export const tests = [
     await page.click('[data-hud="over-online"] [data-act="board"]');
     await page.locator(".board-row.is-me").waitFor();
   }],
+  ["signed in on the main page: the game is already signed in", async (t) => {
+    if (t.target.name === "file") return;
+    const page = await t.open({ seed: null });
+    await fakeSupabase(page.context());
+    const token = fakeJwt("00000000-0000-0000-0000-000000000002");
+    // What michaelsturrup.com's Sign in with Google leaves behind.
+    await page.evaluate((s) => localStorage.setItem("michaelsturrup.auth.v1", JSON.stringify(s)), {
+      access_token: token,
+      refresh_token: "r-site",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: "00000000-0000-0000-0000-000000000002", email: "p@example.com", guest: false },
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.miniNetwork?.world);
+    await page.locator('[data-title="account"]').filter({ hasText: "Playing as Sam" }).waitFor();
+  }],
   ["signed in without a name: pick one, then the run posts", async (t) => {
     if (t.target.name === "file") return;
     const page = await t.open({ seed: null, mobile: true });
