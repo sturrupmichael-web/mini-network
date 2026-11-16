@@ -16,6 +16,12 @@ export function stepFrequency(settings, step) {
   return root * 2 ** (semis / 12);
 }
 
+/** The pitch of the click for the nth square of a link being drawn. Pure. */
+export function tickFrequency(tick, squares) {
+  const semis = Math.min(tick.maxRise, Math.max(0, squares - 1) * tick.rise);
+  return tick.freq * 2 ** (semis / 12);
+}
+
 /**
  * Note scheduler: given the current time, returns the time to play a
  * note at (the next beat with room), or null if this beat is full.
@@ -46,6 +52,9 @@ export function createAudio(settings, { muted = false } = {}) {
   let ambient = null;
   let isMuted = muted;
   const queue = createBeatQueue(settings.notes);
+  // Ticks while drawing: when several squares land in one pointer move they
+  // play one after another instead of all at once.
+  let nextTickAt = 0;
 
   function ensure() {
     if (ctx) return true;
@@ -134,6 +143,27 @@ export function createAudio(settings, { muted = false } = {}) {
       const step = settings.trafficSteps[trafficId] ?? 0;
       const n = settings.notes;
       tone(stepFrequency(settings, step), n.volume, n.decay, when, "triangle");
+    },
+    /** A new site popped in: a soft two-note chime. */
+    spawned() {
+      if (!ready() || !settings.spawn) return;
+      const s = settings.spawn;
+      const t = ctx.currentTime;
+      s.steps.forEach((step, i) => tone(stepFrequency(settings, step), s.volume, s.decay, t + i * s.gap, "sine"));
+    },
+    /**
+     * A square snapped onto (or, with undo, off) the link being drawn.
+     * `squares` is how long the link is now, so long runs climb in pitch.
+     */
+    tick(squares = 1, undo = false) {
+      if (!ready() || !settings.tick) return;
+      const k = settings.tick;
+      const now = ctx.currentTime;
+      const when = Math.max(now, nextTickAt);
+      if (when - now > 0.2) return; // A big jump: don't build a backlog.
+      nextTickAt = when + k.spacing;
+      const freq = undo ? k.undo : tickFrequency(k, squares);
+      tone(freq, k.volume, k.decay, when, "triangle");
     },
     /** A named cue from settings.cues ("event", "drop", "outage", "reward"). */
     cue(name) {

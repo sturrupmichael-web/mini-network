@@ -40,10 +40,11 @@ import { packetAt, removeButtonPos, removeButtonRadius, siteRadiusPx, siteRemove
  *                                    lineFor(siteId), removeSite(siteId), place(item, target) }
  * @param {object} opts.items        ITEMS from equipment.js (what each tray item targets).
  * @param {(reason: string) => void} [opts.onRefused]
+ * @param {(squares: number, undo: boolean) => void} [opts.onSquare]  A square snapped onto (or off) the link being drawn.
  * @param {(target: object | null, at: { x: number, y: number }) => void} [opts.onInspect]
  */
 export function attachPointerInput(canvas, opts) {
-  const { getWorld, getCamera, config, ui, canEdit, actions, onRefused, onInspect, items } = opts;
+  const { getWorld, getCamera, config, ui, canEdit, actions, onRefused, onSquare, onInspect, items } = opts;
   let press = null; // a press on a link: { pointerId, linkId, start, touch }
   let lastPointerType = "mouse"; // contextmenu isn't a PointerEvent everywhere
 
@@ -229,6 +230,8 @@ export function attachPointerInput(canvas, opts) {
       const back = drag.cells.findIndex((c) => sameCell(c, next));
       if (back >= 0) {
         drag.cells.length = back + 1; // undo squares
+        drag.stepAt = performance.now() / 1000;
+        onSquare?.(drag.cells.length - 1, true);
         continue;
       }
       // Cut square corners into diagonals: a sideways step then an up/down
@@ -245,6 +248,7 @@ export function attachPointerInput(canvas, opts) {
       if (site) {
         const result = actions.connect(drag.fromSiteId, site.id, drag.line, [...drag.cells, next]);
         if (result.ok || result.reason === "exists") {
+          if (result.ok) onSquare?.(drag.cells.length, false);
           drag.fromSiteId = site.id;
           drag.cells = [next];
           drag.refused = false;
@@ -265,6 +269,9 @@ export function attachPointerInput(canvas, opts) {
         return;
       }
       drag.cells.push(next);
+      // The newest square snaps in (renderer: drawPreview), with a tick.
+      drag.stepAt = performance.now() / 1000;
+      onSquare?.(drag.cells.length - 1, false);
     }
   }
 

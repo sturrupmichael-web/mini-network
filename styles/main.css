@@ -485,6 +485,57 @@ body {
   inset: 0;
 }
 
+/* The week's last day: the dial breathes and a soft ring spreads from it
+   (MOTION.lastDayPulseS). Neutral chrome, like the rest of the clock. */
+.hud-clock.is-last-day .hud-clock-dial {
+  animation: last-day-pulse var(--last-day-pulse, 1.8s) ease-in-out infinite;
+}
+
+.hud-clock.is-last-day .hud-clock-dial::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  animation: last-day-ring var(--last-day-pulse, 1.8s) ease-out infinite;
+  pointer-events: none;
+}
+
+.hud-clock.is-last-day .hud-clock-text {
+  color: var(--ink);
+}
+
+@keyframes last-day-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes last-day-ring {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-clock.is-last-day .hud-clock-dial,
+  .hud-clock.is-last-day .hud-clock-dial::after {
+    animation: none;
+  }
+  .hud-clock.is-last-day .hud-clock-dial::after {
+    opacity: 0.5;
+  }
+}
+
 .overlay {
   position: absolute;
   inset: 0;

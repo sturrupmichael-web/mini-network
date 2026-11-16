@@ -98,6 +98,14 @@ export const MOTION = {
   slaPulseAt: 0.75,
   /** Gap between packets parked bumper to bumper, in tiles. */
   queueGap: 0.08,
+  /** A new site's soft ring: it spreads out and fades over this long. */
+  spawnRingMs: 900,
+  /** How far the spawn ring spreads past the site, in tiles. */
+  spawnRingSpread: 0.9,
+  /** Packets glide into their place in a queue: how quickly (per second; higher is snappier). */
+  queueEase: 12,
+  /** The week clock pulses gently on the week's last day, once per this many seconds. */
+  lastDayPulseS: 1.8,
 };
 
 /** A node colour by name for a theme ("light" | "dark"). */
