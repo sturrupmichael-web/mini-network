@@ -389,3 +389,28 @@ link tier or terrain kind has no description. The HUD card
 (`hud.showInfo`) sits above the tap point, has `pointer-events: none` so
 drawing carries on straight through it, hides on the next press, and fades
 after `config.input.infoSeconds`.
+
+## Google sign-in and online leaderboards
+
+Same setup as Michael's other games (Oath of Stur, Helpdesk Survivors): the
+shared Supabase project, Google as the only sign-in, no SDK.
+
+- `src/online/auth.js`: `signIn()` sends the page to Supabase's
+  `/auth/v1/authorize?provider=google`, which comes back to this page with
+  the session in the URL hash; `init()` keeps it (storage key `auth`) and
+  cleans the address bar. `rest()` refreshes the session when it's close to
+  expiring. Sign-in is hidden inside frames (the claude.ai preview) and on
+  file://, where Google can't return to the page.
+- `src/online/leaderboard.js`: the board (`rpc/nn_leaderboard`, readable
+  signed out), the player's best and rank (`rpc/nn_my_best`), the name in the
+  shared `players` table (the same name as in the other games), and posting
+  a run to `nn_scores`. A run finished while signed out is kept as
+  `pendingScore` and posts after the player signs in and has a name.
+- `src/ui/online.js`: the account line on the title screen, the leaderboard
+  card (one board per map), the pick-a-name card, and the game-over line.
+- Only Classic runs post (Zen has no outages; the daily is one map per day).
+- The database side is `supabase/migrations/20261116120000_nano_networks_scores.sql`
+  (applied 2026-11-16). The stamp trigger sets who posted and their name, so
+  a client can only post as itself; it also rate-limits posts. Scores are
+  trusted from the client, as in the other games.
+- The CSP's `connect-src` allows the Supabase project URL (dev.html and build.mjs).

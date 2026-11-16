@@ -41,6 +41,9 @@ import { createStorage } from "./storage.js";
 import { createDebugPanel } from "./ui/debug.js";
 import { createHud } from "./ui/hud.js";
 import { createTitle } from "./ui/title.js";
+import { createOnlineUi } from "./ui/online.js";
+import { createAuth } from "./online/auth.js";
+import { createLeaderboard } from "./online/leaderboard.js";
 import { createTutorial } from "./tutorial.js";
 
 const CONFIG = GAME_DATA.config;
@@ -82,9 +85,14 @@ const REFUSED_TEXT = {
  * @param {object} [opts.autostart]  { modeId, mapId, seed } to skip the title screen
  *                                   (from the URL: ?seed=…&map=…&mode=…).
  * @param {boolean} [opts.debug]     Open the debug panel at start (?debug).
+ * @param {HTMLElement} [opts.onlineRoot]  Where the leaderboard cards go.
+ * @param {object} [opts.online]    { fetch, location, history } stand-ins (tests).
  */
-export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = null, debug = false }) {
+export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, randomSeed, autostart = null, debug = false, online = {} }) {
   const storage = createStorage();
+  const auth = createAuth({ storage, ...online });
+  const signedIn = auth.init();
+  const leaderboard = createLeaderboard({ auth, storage });
   const settings = { speed: 1, muted: false, theme: "system", ...storage.get("settings", {}) };
   const saveSettings = () => storage.set("settings", settings);
   const data = SIM_DATA;
@@ -275,6 +283,12 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       });
     }
     run.result = result;
+    // Classic runs go on that map's online leaderboard.
+    onlineUi.runEnded(
+      mode.scores && !run.daily
+        ? { map: map.id, mapName: map.name, score: world.stats.score, days: Math.round(days * 10) / 10, seed: String(run.seed) }
+        : null,
+    );
   }
 
   /** Start a game. */
@@ -397,7 +411,22 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       }
     },
     getSettings: () => settings,
+    onBoard: () => onlineUi.openBoard(title.mapId),
   });
+
+  const onlineHost = onlineRoot ?? titleRoot.parentElement.appendChild(document.createElement("div"));
+  onlineHost.classList.add("title-root");
+  const onlineUi = createOnlineUi(onlineHost, {
+    auth,
+    leaderboard,
+    maps,
+    accountSlot: title.accountSlot,
+    overSlot: hud.overOnlineSlot,
+    currentMapId: () => title.mapId,
+  });
+  onlineUi.refresh();
+  if (signedIn === "signed-in") onlineUi.afterSignIn();
+  else if (signedIn === "error" && auth.lastError) hud.toast(`Sign-in didn't work: ${auth.lastError}`);
 
   const debugPanel = createDebugPanel(hudRoot.parentElement, {
     siteTypes: Object.keys(GAME_DATA.sites).filter((t) => !GAME_DATA.sites[t].junction),
@@ -490,6 +519,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
   window.addEventListener("keydown", (e) => {
     // Leave keys alone in form fields and in dialogs (Space/Enter pick a reward there).
     if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, .overlay")) return;
+    if (onlineUi.open) return;
     if (e.code === "Backquote") {
       debugPanel.toggle();
       return;
@@ -543,6 +573,9 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     },
     loop,
     camera,
+    auth,
+    leaderboard,
+    onlineUi,
     ui,
     audio,
     debugPanel,
