@@ -177,10 +177,19 @@ land between ticks.
 - **Title screen** (`ui/title.js`): pick a mode and a map, see your best
   score for that pair, Play. While it's open a preview game runs behind it.
   The in-game menu button pauses and reopens it with Resume.
-- **Maps** (`data/maps.js`): Florida Region, Coast to Coast and Campus.
+- **Maps** (`data/maps.js`): nine handcrafted maps, in unlock order.
   A map's optional `tuning` is merged over `config.js` section by section
   (`sim/config.js` `configForMap`), so maps can change spacing, growth,
-  links or inventory without code.
+  links or inventory without code. `dataForMap` (applied in `createWorld`,
+  so `world.data` is per map) applies a map's `events` and `siteUnlock`
+  overrides. Terrain areas can have `holes`. A map may start with several
+  data centers: growth picks one at random, the view centres between them
+  (`hubCentre`), and broadcasts come from each site's nearest one.
+- **Unlocks** (`src/unlocks.js`): maps open in order. Surviving
+  `config.unlocks.goalDays` (or a map's `goalDays`) in a mode with outages
+  and scores marks the map beaten (storage key `beatenMaps`) and opens the
+  next; `game.js` `checkGoal` shows a ticker the first time. Maps a player
+  already has a Classic score on stay open.
 - **Modes** (`data/modes.js`): Classic; Zen (`outages: false`, so
   `isHalted` never ends the game and no scores are kept); Daily challenge
   (`daily.js` hashes today's date to a map and seed `daily-YYYY-MM-DD`;

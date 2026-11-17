@@ -62,7 +62,8 @@ function insidePolygon(p, poly) {
 /**
  * The map's terrain as a Map from cell key to terrain kind: every square
  * whose centre is inside one of map.terrain's shapes. Links can't cross
- * these squares and nothing can be built on them.
+ * these squares and nothing can be built on them. An area can have holes
+ * (polygons cut out of it), so a sea can hold islands.
  */
 export function buildTerrain(world) {
   const out = new Map();
@@ -71,7 +72,10 @@ export function buildTerrain(world) {
     for (let cx = 0; cx < cols; cx++) {
       for (let cy = 0; cy < rows; cy++) {
         const c = { cx, cy };
-        if (insidePolygon(cellCenter(world, c), area.points)) out.set(cellKey(c), area.kind);
+        const p = cellCenter(world, c);
+        if (!insidePolygon(p, area.points)) continue;
+        if (area.holes?.some((h) => insidePolygon(p, h))) continue;
+        out.set(cellKey(c), area.kind);
       }
     }
   }

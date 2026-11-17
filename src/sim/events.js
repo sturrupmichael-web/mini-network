@@ -6,7 +6,7 @@
 import { createPacket } from "./packets.js";
 import { findSpot } from "./progression.js";
 import { costToDestination } from "./routing.js";
-import { addSite, currentDay, hubSite } from "./sites.js";
+import { addSite, currentDay, hubCentre, hubSites } from "./sites.js";
 
 
 /**
@@ -39,36 +39,45 @@ const EFFECTS = {
 
   broadcast: {
     start(world, ev) {
-      const hub = hubSite(world);
-      if (!hub) return false;
-      // Only sites the data center can actually reach, or the packets would
-      // pile up at HQ through no fault of the player's.
-      const targets = world.sites.filter(
-        (s) =>
-          // Only sites that send traffic: not destinations, not switches.
-          world.data.sites[s.type].packetInterval !== null &&
-          costToDestination(world, hub, `#${s.id}`) < Infinity,
-      );
-      if (targets.length === 0) return false;
+      const hubs = hubSites(world);
+      if (hubs.length === 0) return false;
+      // Each site hears from the data center closest to it. Only sites a
+      // data center can actually reach, or the packets would pile up at HQ
+      // through no fault of the player's.
       const plan = [];
-      for (let round = 0; round < ev.params.perSite; round++) for (const t of targets) plan.push(t.id);
-      return { hubId: hub.id, plan, sent: 0, startedAt: world.time };
+      const targets = [];
+      for (const s of world.sites) {
+        // Only sites that send traffic: not destinations, not switches.
+        if (world.data.sites[s.type].packetInterval === null) continue;
+        let from = null;
+        let best = Infinity;
+        for (const h of hubs) {
+          const cost = costToDestination(world, h, `#${s.id}`);
+          if (cost < best) {
+            best = cost;
+            from = h;
+          }
+        }
+        if (from) targets.push({ hubId: from.id, siteId: s.id });
+      }
+      if (targets.length === 0) return false;
+      for (let round = 0; round < ev.params.perSite; round++) for (const t of targets) plan.push(t);
+      return { plan, sent: 0, startedAt: world.time };
     },
     tick(world, ev, state) {
-      const hub = world.siteById.get(state.hubId);
-      if (!hub) return;
       const progress = ev.duration > 0 ? Math.min(1, (world.time - state.startedAt) / ev.duration) : 1;
       const due = Math.ceil(progress * state.plan.length);
       while (state.sent < due) {
-        const targetId = state.plan[state.sent++];
-        if (world.siteById.has(targetId)) createPacket(world, hub, ev.params.traffic, `#${targetId}`);
+        const { hubId, siteId } = state.plan[state.sent++];
+        const hub = world.siteById.get(hubId);
+        if (hub && world.siteById.has(siteId)) createPacket(world, hub, ev.params.traffic, `#${siteId}`);
       }
     },
   },
 
   acquisition: {
     start(world, ev) {
-      const hub = hubSite(world) ?? { x: world.map.width / 2, y: world.map.height / 2 };
+      const hub = hubCentre(world);
       const corners = [
         { x: 0, y: 0 },
         { x: world.map.width, y: 0 },
@@ -159,7 +168,7 @@ function grant(world, items = {}) {
 
 /** A valid spot as far from the data center (and other far sites) as we can find. */
 function farSpot(world) {
-  const hub = hubSite(world) ?? { x: world.map.width / 2, y: world.map.height / 2 };
+  const hub = hubCentre(world);
   let best = null;
   let bestScore = -Infinity;
   for (let i = 0; i < 12; i++) {

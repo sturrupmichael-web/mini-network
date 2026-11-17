@@ -18,6 +18,7 @@ import { computeRoutes } from "./routing.js";
 import { addSite, isStarving, siteCapacity, updateHunger } from "./sites.js";
 import { buildTerrain } from "./grid.js";
 import { updateView } from "./view.js";
+import { dataForMap } from "./config.js";
 
 export { addSite, siteCapacity } from "./sites.js";
 export { addFirewall, addLink, findLink, makeBackbone, removeLink, reshapeLink, rerouteLink, upgradeLink } from "./links.js";
@@ -35,7 +36,8 @@ export { setEventSchedule, triggerEvent } from "./events.js";
  * @param {number|string} opts.seed
  * @param {boolean} [opts.outages]  false for Zen mode: overloads never end the game.
  */
-export function createWorld({ config, data, map, seed, outages = true }) {
+export function createWorld({ config, data: baseData, map, seed, outages = true }) {
+  const data = dataForMap(baseData, map);
   const world = {
     config,
     data,

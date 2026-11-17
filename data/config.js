@@ -290,6 +290,15 @@ export const CONFIG = {
     warnAt: 0.7,
   },
 
+  unlocks: {
+    /**
+     * Maps open one at a time, in the order they're listed in maps.js.
+     * Surviving this many days on a map (in Classic or the Daily challenge)
+     * beats it and opens the next one. A map can set its own goalDays.
+     * 14 = make it through two full weeks.
+     */
+    goalDays: 14,
+  },
   rewards: {
     /**
      * Delivered at the end of every week before you pick a reward, so the

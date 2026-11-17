@@ -254,6 +254,16 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
         else if (typeof v !== typeof config[section][k]) err(`${at}.tuning.${section}.${k} has the wrong type`);
       }
     }
+    const eventIds = new Set((events ?? []).map((e) => e.id));
+    for (const [id, o] of Object.entries(m.events ?? {})) {
+      if (!eventIds.has(id)) err(`${at}.events.${id} is not an event`);
+      else if (o !== false && (typeof o !== "object" || o === null)) err(`${at}.events.${id} must be false or an object`);
+    }
+    for (const [type, day] of Object.entries(m.siteUnlock ?? {})) {
+      if (!sites?.[type]) err(`${at}.siteUnlock.${type} is not a site type`);
+      else if (!isNum(day) || day < 0) err(`${at}.siteUnlock.${type} must be a day number (0 or more)`);
+    }
+    if (m.goalDays !== undefined && !isPos(m.goalDays)) err(`${at}.goalDays must be a positive number`);
     const cellSize = m.tuning?.grid?.cellSize ?? config?.grid?.cellSize ?? 1;
     for (const [j, area] of (m.terrain ?? []).entries()) {
       if (!terrain?.[area?.kind]) err(`${at}.terrain[${j}].kind "${area?.kind}" is not a terrain type`);
@@ -262,12 +272,19 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
         err(`${at}.terrain[${j}].points must be a list of at least three [x, y] points`);
         continue;
       }
+      const holes = area.holes ?? [];
+      if (!Array.isArray(holes) || !holes.every((h) => Array.isArray(h) && h.length >= 3 && h.every((p) => Array.isArray(p) && isNum(p[0]) && isNum(p[1])))) {
+        err(`${at}.terrain[${j}].holes must be a list of polygons`);
+        continue;
+      }
       // Starting sites need their square and the ones around it clear.
       for (const [si, s] of m.start.entries()) {
         const cx = (Math.floor(s.x / cellSize) + 0.5) * cellSize;
         const cy = (Math.floor(s.y / cellSize) + 0.5) * cellSize;
         for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-          if (pointInPolygon(cx + dx * cellSize, cy + dy * cellSize, pts)) {
+          const px = cx + dx * cellSize;
+          const py = cy + dy * cellSize;
+          if (pointInPolygon(px, py, pts) && !holes.some((h) => pointInPolygon(px, py, h))) {
             err(`${at}.start[${si}] is on or right next to terrain[${j}]`);
             break;
           }

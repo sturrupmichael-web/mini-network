@@ -12,4 +12,5 @@ export const TERRAIN_TYPES = {
   water: { name: "Water" },
   park: { name: "Park" },
   hills: { name: "Hills" },
+  block: { name: "City block" },
 };

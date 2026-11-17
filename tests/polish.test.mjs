@@ -19,7 +19,8 @@ function memoryBackend() {
 export const tests = [
   ["there are at least three maps, each different", () => {
     assert.ok(MAPS.length >= 3);
-    for (const m of MAPS) assert.ok(m.boundaries.length >= 1, `${m.id} has a carrier boundary`);
+    // Every map has something in the way: carrier boundaries or terrain.
+    for (const m of MAPS) assert.ok(m.boundaries.length + (m.terrain?.length ?? 0) >= 1, `${m.id} has obstacles`);
     assert.equal(new Set(MAPS.map((m) => `${m.width}x${m.height}`)).size, MAPS.length, "different shapes");
   }],
   ["every map plays: traffic flows once linked", () => {

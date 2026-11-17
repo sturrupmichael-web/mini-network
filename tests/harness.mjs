@@ -6,8 +6,10 @@
  *   t.target          { name: "dev" | "built" | "file", url }
  *   t.open(opts)      Opens the game and returns a Playwright page once it
  *                     has started. opts: { mobile?: boolean, seed?: string,
- *                     query?: string, context? }. seed: null opens the title
- *                     screen; context reuses a browser context (same storage).
+ *                     query?: string, context?, locked? }. seed: null opens the
+ *                     title screen; context reuses a browser context (same
+ *                     storage). Every map starts unlocked (as if all were
+ *                     beaten) unless locked: true.
  *                     Desktop is 1366×768; mobile is a 390×844 phone with
  *                     touch at 3× pixel density.
  * Any console error or uncaught exception on any opened page fails the test.
@@ -19,6 +21,9 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 import { build } from "../build.mjs";
+import { MAPS } from "../data/maps.js";
+
+const ALL_MAPS = MAPS.map((m) => m.id);
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -78,9 +83,20 @@ export async function createHarness() {
     const errors = [];
     const t = {
       target,
-      async open({ mobile = false, seed = "test", query = "", context: reuse = null } = {}) {
+      async open({ mobile = false, seed = "test", query = "", context: reuse = null, locked = false } = {}) {
         const context = reuse ?? (await browser.newContext(mobile ? MOBILE : DESKTOP));
-        if (!reuse) contexts.push(context);
+        if (!reuse) {
+          contexts.push(context);
+          if (!locked) {
+            await context.addInitScript((ids) => {
+              try {
+                if (localStorage.getItem("miniNetwork:beatenMaps") === null) localStorage.setItem("miniNetwork:beatenMaps", JSON.stringify(ids));
+              } catch {
+                // Storage blocked: the game falls back to memory.
+              }
+            }, ALL_MAPS);
+          }
+        }
         const page = await context.newPage();
         page.on("console", (msg) => {
           if (msg.type() === "error") errors.push(`console.error: ${msg.text()}`);
