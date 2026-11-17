@@ -15,7 +15,7 @@ function nearTerrain(world, x, y) {
   }
   return false;
 }
-import { addSite, hubSite } from "./sites.js";
+import { addSite, hubSites } from "./sites.js";
 
 /** Day number (0-based), week (1-based), day of week (0 = Mon) and fraction through the day. */
 export function clock(world) {
@@ -120,7 +120,13 @@ export function findSiteSpot(world, type = null) {
     const near = findSpot(world, { center: hub, radius: d.radius });
     if (near) return near;
   }
-  const hub = hubSite(world) ?? { x: world.map.width / 2, y: world.map.height / 2 };
+  // Grow around a data center (a random one, on a map with several).
+  const centres = hubSites(world);
+  // (Only roll when there's a choice, so one-HQ maps keep their old seeds.)
+  const hub =
+    centres.length > 1
+      ? centres[world.rng.int(0, centres.length - 1)]
+      : (centres[0] ?? { x: world.map.width / 2, y: world.map.height / 2 });
   return findSpot(world, { center: hub, radius: g.startRadius + g.radiusGrowthPerDay * clock(world).day });
 }
 

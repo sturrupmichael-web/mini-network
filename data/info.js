@@ -56,6 +56,7 @@ export const INFO = {
     water: "Links can't cross water and nothing is built on it. Steer around it, or make a link a backbone to go straight over.",
     park: "Protected parkland. Links have to go around it, and no sites are built on it.",
     hills: "Too steep to dig. Links have to go around, unless you make them a backbone.",
+    block: "Buildings. Links run along the streets between them, unless you make them a backbone.",
   },
 
   states: {

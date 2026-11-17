@@ -38,6 +38,7 @@ import {
 } from "./sim/world.js";
 import { bestScore, recordScore, scoreKey } from "./scores.js";
 import { createStorage } from "./storage.js";
+import { createUnlocks } from "./unlocks.js";
 import { createDebugPanel } from "./ui/debug.js";
 import { createHud } from "./ui/hud.js";
 import { createTitle } from "./ui/title.js";
@@ -99,6 +100,7 @@ export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, rando
   const maps = GAME_DATA.maps;
   const modes = GAME_DATA.modes;
   const audio = createAudio(GAME_DATA.audio, { muted: settings.muted });
+  const unlocks = createUnlocks(storage, maps, CONFIG);
 
   const camera = createCamera();
   const ui = {
@@ -216,6 +218,7 @@ export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, rando
       if ((isHalted(world) || title.visible || !run) && hud.infoShown) hud.showInfo(null);
       if (run && world.over && !run.result) finishRun();
       handleEvents();
+      checkGoal();
       if (run && tutorial.active) tutorial.update({ links: world.links.length });
       hud.coach(run && !world.over ? tutorial.text : null);
       const now = performance.now() / 1000;
@@ -256,6 +259,25 @@ export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, rando
       else if (e.type === "overload-warning") audio.cue("warning");
       else if (e.type === "week") audio.cue("reward");
     }
+  }
+
+  /**
+   * Beating a map: survive its goal days in a mode with outages and scores
+   * (Classic, Daily). The first time, it opens the next map.
+   */
+  function checkGoal() {
+    if (!run || run.beaten || world.over) return;
+    const mode = modes[run.modeId];
+    if (!mode.outages || !mode.scores) return;
+    if (clock(world).day < unlocks.goalDays(map)) return;
+    run.beaten = true;
+    const { first, opened } = unlocks.markBeaten(map.id);
+    if (!first) return;
+    audio.cue("reward");
+    hud.ticker(
+      `${map.name} beaten`,
+      opened ? `${opened.name} is now unlocked. Keep going for a high score.` : "Keep going for a high score.",
+    );
   }
 
   /** Record the score and build the share text, once, when a run ends. */
@@ -305,7 +327,15 @@ export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, rando
     config = configForMap(CONFIG, map);
     const runSeed = daily ? daily.seed : (seed ?? randomSeed());
     world = createWorld({ config, data, map, seed: runSeed, outages: mode.outages });
-    run = { modeId: modes[modeId] ? modeId : "classic", mapId: map.id, seed: runSeed, daily: daily?.key ?? null, result: null, fixedSeed };
+    run = {
+      modeId: modes[modeId] ? modeId : "classic",
+      mapId: map.id,
+      seed: runSeed,
+      daily: daily?.key ?? null,
+      result: null,
+      fixedSeed,
+      beaten: false,
+    };
     settleCamera();
     input.cancel();
     ui.selectedLinkId = null;
@@ -402,6 +432,12 @@ export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, rando
       const daily = modes[modeId].daily ? dailyChallenge(maps).key : null;
       return bestScore(storage, scoreKey(modeId, mapId, daily));
     },
+    unlock: (mapId) => ({
+      open: unlocks.isUnlocked(mapId),
+      beaten: unlocks.isBeaten(mapId),
+      by: unlocks.unlockedBy(mapId)?.name ?? null,
+      goalDays: unlocks.goalDays(maps.find((m) => m.id === mapId)),
+    }),
     onPlay: (choice) => startRun(choice),
     onResume: resume,
     onSettings: (change) => {

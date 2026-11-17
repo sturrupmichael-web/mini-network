@@ -45,14 +45,15 @@ export const NODE_ORDER = ["blue", "red", "yellow", "green", "purple", "teal", "
  *   secZone   water ("security zone") and carrier boundaries
  *   wallZone  hills ("wall/floor zone")
  *   park      parks: the ground tinted green
+ *   block     city blocks: buildings, a touch darker than hills
  *   cable     links
  *   backbone  backbone links, the data center and core routers
  */
 export const PALETTES = {
-  office: { ground: "#EFE9DC", secZone: "#BFD3DE", wallZone: "#E0D6C2", park: "#D5E0C4", cable: "#FBFAF7", backbone: "#4A5560" },
-  campus: { ground: "#E4EADB", secZone: "#B7D0D6", wallZone: "#D3DCC6", park: "#C9DDB9", cable: "#FBFCF8", backbone: "#46544E" },
-  datacenter: { ground: "#E3E7EA", secZone: "#C2CCE0", wallZone: "#D2D8DD", park: "#CFDDCB", cable: "#FFFFFF", backbone: "#3F4A57" },
-  night: { ground: "#1F2329", secZone: "#25384A", wallZone: "#2A3038", park: "#243328", cable: "#3A414B", backbone: "#9AA6B2" },
+  office: { ground: "#EFE9DC", secZone: "#BFD3DE", wallZone: "#E0D6C2", park: "#D5E0C4", cable: "#FBFAF7", backbone: "#4A5560", block: "#D6CDBB" },
+  campus: { ground: "#E4EADB", secZone: "#B7D0D6", wallZone: "#D3DCC6", park: "#C9DDB9", cable: "#FBFCF8", backbone: "#46544E", block: "#C6CFB9" },
+  datacenter: { ground: "#E3E7EA", secZone: "#C2CCE0", wallZone: "#D2D8DD", park: "#CFDDCB", cable: "#FFFFFF", backbone: "#3F4A57", block: "#C8CFD6" },
+  night: { ground: "#1F2329", secZone: "#25384A", wallZone: "#2A3038", park: "#243328", cable: "#3A414B", backbone: "#9AA6B2", block: "#30363F" },
 };
 
 /** Warm shadows by day, never pure black. */
@@ -183,6 +184,7 @@ function groundKeys(p) {
       water: { fill: p.secZone },
       park: { fill: p.park },
       hills: { fill: p.wallZone },
+      block: { fill: p.block },
     },
   };
 }

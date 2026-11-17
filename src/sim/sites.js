@@ -182,6 +182,24 @@ export function destinationExists(world, key, settled = false) {
   return world.sites.some((s) => siteMatches(s, key) && (s.born === 0 || s.born <= cutoff));
 }
 
+/** Every data center (a map can have more than one). */
+export function hubSites(world) {
+  return world.sites.filter((s) => world.data.sites[s.type].shape === "hub");
+}
+
+/**
+ * The middle of the network: the data center, or the point halfway between
+ * them on a map with several. The map's centre if there are none.
+ */
+export function hubCentre(world) {
+  const hubs = hubSites(world);
+  if (hubs.length === 0) return { x: world.map.width / 2, y: world.map.height / 2 };
+  return {
+    x: hubs.reduce((t, h) => t + h.x, 0) / hubs.length,
+    y: hubs.reduce((t, h) => t + h.y, 0) / hubs.length,
+  };
+}
+
 /** The first data center (the "HQ" broadcasts come from). */
 export function hubSite(world) {
   return world.sites.find((s) => world.data.sites[s.type].shape === "hub") ?? null;

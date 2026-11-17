@@ -19,15 +19,18 @@ function memoryBackend() {
 export const tests = [
   ["there are at least three maps, each different", () => {
     assert.ok(MAPS.length >= 3);
-    for (const m of MAPS) assert.ok(m.boundaries.length >= 1, `${m.id} has a carrier boundary`);
+    // Every map has something in the way: carrier boundaries or terrain.
+    for (const m of MAPS) assert.ok(m.boundaries.length + (m.terrain?.length ?? 0) >= 1, `${m.id} has obstacles`);
     assert.equal(new Set(MAPS.map((m) => `${m.width}x${m.height}`)).size, MAPS.length, "different shapes");
   }],
   ["every map plays: traffic flows once linked", () => {
     for (const map of MAPS) {
       const world = makeWorld({ map, config: configForMap(CONFIG, map), seed: map.id });
       world.inventory.leased = 5;
-      const hub = world.sites.find((s) => s.type === "datacenter");
-      for (const s of world.sites.filter((x) => x !== hub)) {
+      const hubs = world.sites.filter((s) => s.type === "datacenter");
+      for (const s of world.sites.filter((x) => !hubs.includes(x))) {
+        // Link each site to its nearest data center (Twin Cities has two).
+        const hub = hubs.reduce((a, b) => (Math.hypot(a.x - s.x, a.y - s.y) <= Math.hypot(b.x - s.x, b.y - s.y) ? a : b));
         const result = addLink(world, s.id, hub.id);
         assert.ok(result.ok, `${map.id}: ${result.reason}`);
       }

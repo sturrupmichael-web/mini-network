@@ -5,6 +5,12 @@
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+/** "2 weeks", "1 week", or "10 days". */
+export function weeksText(days) {
+  if (days % 7 === 0) return days === 7 ? "1 week" : `${days / 7} weeks`;
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
 /**
  * @param {HTMLElement} root
  * @param {object} opts
@@ -17,9 +23,12 @@ const esc = (s) =>
  * @param {(change: object) => void} opts.onSettings  { muted?, theme? }
  * @param {() => object} opts.getSettings
  * @param {() => void} [opts.onBoard]  Open the leaderboards.
+ * @param {(mapId: string) => {open: boolean, beaten: boolean, by: string|null, goalDays: number}} [opts.unlock]
+ *        Whether a map is open yet (unlocks.js); every map is open without it.
  */
 export function createTitle(root, opts) {
   const { modes, maps, dailyMapId, best, onPlay, onResume, onSettings, getSettings, onBoard = () => {} } = opts;
+  const unlock = opts.unlock ?? (() => ({ open: true, beaten: false, by: null, goalDays: 0 }));
   let modeId = "classic";
   let mapId = maps[0].id;
 
@@ -38,8 +47,9 @@ export function createTitle(root, opts) {
           ${maps
             .map(
               (m) => `<button type="button" role="radio" class="map-card" data-map="${esc(m.id)}" aria-checked="false">
-                <strong>${esc(m.name)}</strong><span>${esc(m.description ?? "")}</span>
-                <span class="map-best" data-map-best="${esc(m.id)}"></span></button>`,
+                <strong>${esc(m.name)}</strong><span class="map-desc">${esc(m.description ?? "")}</span>
+                <span class="map-best" data-map-best="${esc(m.id)}"></span>
+                <span class="map-lock" data-map-lock="${esc(m.id)}" hidden></span></button>`,
             )
             .join("")}
         </div>
@@ -88,10 +98,19 @@ export function createTitle(root, opts) {
     for (const b of modeBtns) b.setAttribute("aria-checked", String(b.dataset.mode === modeId));
     q('[data-title="mode-detail"]').textContent = mode.detail;
     const forced = mode.daily ? dailyMapId(modeId) : null;
+    // A locked map can't be picked (the daily challenge can be any map).
+    if (!forced && !unlock(mapId).open) mapId = (maps.find((m) => unlock(m.id).open) ?? maps[0]).id;
     const shownMap = forced ?? mapId;
     for (const b of mapBtns) {
+      const u = unlock(b.dataset.map);
+      const locked = !u.open && !forced;
       b.setAttribute("aria-checked", String(b.dataset.map === shownMap));
-      b.disabled = Boolean(forced) && b.dataset.map !== forced;
+      b.disabled = forced ? b.dataset.map !== forced : locked;
+      b.classList.toggle("is-locked", locked);
+      b.classList.toggle("is-beaten", u.beaten);
+      const lock = b.querySelector("[data-map-lock]");
+      lock.textContent = locked ? `Locked. Survive ${weeksText(u.goalDays)} on ${u.by} to unlock.` : u.beaten ? "Beaten" : "";
+      lock.hidden = !lock.textContent;
     }
     // Each map card shows its own best (not for the daily, whose best is per day).
     for (const b of mapBtns) {
@@ -123,7 +142,7 @@ export function createTitle(root, opts) {
   }
   for (const b of mapBtns) {
     b.addEventListener("click", () => {
-      if (modes[modeId].daily) return;
+      if (modes[modeId].daily || !unlock(b.dataset.map).open) return;
       mapId = b.dataset.map;
       refresh();
     });
@@ -157,7 +176,7 @@ export function createTitle(root, opts) {
   return {
     /** Show the title screen. canResume: a game is in progress. */
     show({ canResume = false, mapId: current } = {}) {
-      if (current && !modes[modeId].daily) mapId = current;
+      if (current && !modes[modeId].daily && unlock(current).open) mapId = current;
       q('[data-title="resume"]').hidden = !canResume;
       screen.hidden = false;
       refresh();

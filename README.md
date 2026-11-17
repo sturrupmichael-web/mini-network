@@ -22,7 +22,10 @@ Open <http://localhost:8000/dev.html>. `dev.html` loads the source files
 directly, so just reload after an edit.
 
 The title screen lets you pick a mode (Classic, Zen, Daily challenge) and a
-map (Florida Region, Coast to Coast, Campus). The gear opens settings
+map. There are nine: Florida Region, Campus, Lake Ring, Coast to Coast, Port
+Town, The Pass, Downtown, Twin Cities and Archipelago. They open one at a
+time: survive two weeks on a map in Classic or the Daily challenge to unlock
+the next (the daily challenge can be on any map). The gear opens settings
 (sound, and an Auto/Light/Dark theme). In a game, the moon/sun button
 at the top switches between light and dark mode.
 
@@ -31,7 +34,7 @@ URL options:
 | Parameter | Effect |
 | --- | --- |
 | `?seed=abc` | Skip the title and play that exact game (same seed + same moves = same game) |
-| `&map=campus` | Pick the map (`florida-region`, `coast-to-coast`, `campus`) |
+| `&map=campus` | Pick the map by its id in `data/maps.js` (works for locked maps too) |
 | `&mode=zen` | Pick the mode (`classic`, `zen`, `daily`) |
 | `?debug` | Open the debug panel at start |
 
@@ -151,7 +154,13 @@ validator, which names the exact field that's wrong.
   that links must go around: `{ kind, points: [[x, y], …] }`; kinds are in
   `data/terrain.js`, colours in `data/theme.js`) and optional `tuning`
   (config overrides for this map only, e.g. `{ links: { startingCount: 50 } }`).
-  It shows up on the title screen and in the daily rotation.
+  Terrain can have `holes` (islands in a sea). A map can also change events
+  (`events: { backhoe: { schedule: … } }`, or `false` to turn one off), when
+  site types unlock (`siteUnlock: { warehouse: 0 }`) and its goal
+  (`goalDays`). A map can have more than one data center. Maps unlock in the
+  order they're listed. It shows up on the title screen and in the daily
+  rotation. Add its id to the `nn_scores` map check with a new migration in
+  `supabase/migrations/` so it gets an online leaderboard.
 - **A traffic type:** add it to `TRAFFIC_TYPES` in `data/traffic.js`
   (colour, shape, size, destination `to`, points, `unlockDay`, `hours`),
   then give it a weight in the `traffic` of the site types that send it in
