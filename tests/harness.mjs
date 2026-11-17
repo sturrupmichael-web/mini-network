@@ -85,18 +85,7 @@ export async function createHarness() {
       target,
       async open({ mobile = false, seed = "test", query = "", context: reuse = null, locked = false } = {}) {
         const context = reuse ?? (await browser.newContext(mobile ? MOBILE : DESKTOP));
-        if (!reuse) {
-          contexts.push(context);
-          if (!locked) {
-            await context.addInitScript((ids) => {
-              try {
-                if (localStorage.getItem("miniNetwork:beatenMaps") === null) localStorage.setItem("miniNetwork:beatenMaps", JSON.stringify(ids));
-              } catch {
-                // Storage blocked: the game falls back to memory.
-              }
-            }, ALL_MAPS);
-          }
-        }
+        if (!reuse) contexts.push(context);
         const page = await context.newPage();
         page.on("console", (msg) => {
           if (msg.type() === "error") errors.push(`console.error: ${msg.text()}`);
@@ -105,6 +94,21 @@ export async function createHarness() {
         const params = [seed === null ? "" : `seed=${encodeURIComponent(seed)}`, query].filter(Boolean).join("&");
         await page.goto(params ? `${target.url}?${params}` : target.url);
         await page.waitForFunction(() => window.miniNetwork?.world, null, { timeout: 10_000 });
+        if (!locked) {
+          // Open every map (as if all were beaten). Done after load rather than
+          // in an init script: touching localStorage at document start of a
+          // second file:// page can make it miss what the first page saved.
+          await page.evaluate((ids) => {
+            const g = window.miniNetwork;
+            try {
+              if (localStorage.getItem("miniNetwork:beatenMaps") !== null) return;
+              localStorage.setItem("miniNetwork:beatenMaps", JSON.stringify(ids));
+            } catch {
+              return; // Storage blocked: the game keeps to memory.
+            }
+            if (!g.run) g.openMenu();
+          }, ALL_MAPS);
+        }
         return page;
       },
     };
