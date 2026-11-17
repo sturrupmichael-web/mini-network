@@ -240,6 +240,8 @@ export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, rando
   /** Sounds and pops for what happened since the last frame. */
   function handleEvents() {
     const now = performance.now() / 1000;
+    // One chime however many sites appear at once (a district lands as a group).
+    if (world.events.some((e) => e.type === "site-added")) audio.spawned();
     for (const e of world.events) {
       if (e.type === "delivered") {
         audio.delivered(e.traffic);
@@ -495,6 +497,7 @@ export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, rando
     },
     items: GAME_DATA.items,
     onRefused: (reason) => REFUSED_TEXT[reason] && hud.toast(REFUSED_TEXT[reason]),
+    onSquare: (squares, undo) => audio.tick(squares, undo),
     onInspect: (target, at) => {
       const card = describe(world, GAME_DATA.info, target, {
         tiers: GAME_DATA.tiers,

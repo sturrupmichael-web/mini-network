@@ -20,7 +20,7 @@ import { pointAlong } from "../sim/geometry.js";
 import { cellCenter, cellOf, cellsToPath, gridSize, straightCells } from "../sim/grid.js";
 import { isBlocked } from "../sim/links.js";
 import { busiestLink } from "../sim/runstats.js";
-import { worldToScreen } from "./camera.js";
+import { screenToWorld, worldToScreen } from "./camera.js";
 
 /** Small UI bits (the remove button, arrows) shrink a little on small screens and grow on big ones. */
 export function uiScale(camera) {
@@ -768,6 +768,14 @@ function drawPreview(env, drag) {
   if (!from || !drag.pointerWorld || !drag.cells) return;
   const pts = toScreenPath(camera, cellsToPath(world, drag.cells));
   const width = SIZE.cable * T;
+  // The newest square snaps in: its segment grows out over cableSnapMs.
+  const snap = drag.stepAt === undefined ? 1 : (env.now - drag.stepAt) / (MOTION.cableSnapMs / 1000);
+  if (pts.length > 1 && snap >= 0 && snap < 1) {
+    const a = pts.at(-2);
+    const b = pts.at(-1);
+    const e = easeOutBack(snap);
+    pts[pts.length - 1] = { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e };
+  }
   if (pts.length > 1) {
     // A cable lifted off the map: a soft shadow, then the cable.
     ctx.globalAlpha = SHADOW.alpha[env.mode];
@@ -829,6 +837,27 @@ function drawReroute(env, reroute) {
 /** A colour mixed toward white. */
 const lighten = (c, t) => mixColor(c, "#ffffff", t);
 
+const easeOutCubic = (t) => 1 - (1 - t) ** 3;
+
+/**
+ * A new site sends out one soft ring in its own colour as it pops in: it
+ * spreads MOTION.spawnRingSpread tiles past the site and fades away.
+ */
+function drawSpawnRing(env, site, box, x, y) {
+  const { ctx, world, colors, k, P } = env;
+  if (site.born === 0) return;
+  const t = (world.time - site.born) / (MOTION.spawnRingMs / 1000);
+  if (t <= 0 || t >= 1) return;
+  const e = easeOutCubic(t);
+  ctx.globalAlpha = 0.5 * (1 - t);
+  ctx.strokeStyle = ringColor(world, site, colors);
+  ctx.lineWidth = Math.max(1, 3 * k * (1 - 0.6 * t));
+  ctx.beginPath();
+  ctx.arc(x, y, Math.max(box.w, box.h) / 2 + 0.1 * P + MOTION.spawnRingSpread * P * e, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
 /**
  * Draw one site from its sprite.
  *   workstation  a rounded square with a lighter "monitor" in its top half
@@ -846,6 +875,7 @@ function drawSite(env, site) {
   if (grow <= 0.01) return;
   const box = siteBox(world, site, camera);
   const color = siteColor(world, site, colors);
+  drawSpawnRing(env, site, box, x, y);
   const highlighted = ui.hoverSiteId === site.id || ui.drag?.fromSiteId === site.id || ui.reroute?.overSiteId === site.id || ui.selectedSiteId === site.id;
   if (highlighted) {
     ctx.fillStyle = colors.highlight;
@@ -982,10 +1012,42 @@ function drawPackets(env) {
   const { world, camera } = env;
   const byId = new Map();
   for (const p of world.packets) byId.set(p.id, p);
-  const spots = [];
-  for (const site of world.sites) spots.push(...queuedPacketSpots(world, camera, site, byId));
-  spots.push(...travellingPacketSpots(world, camera));
-  drawPills(env, spots);
+  const queued = [];
+  for (const site of world.sites) for (const spot of queuedPacketSpots(world, camera, site, byId)) queued.push([site, spot]);
+  const travelling = travellingPacketSpots(world, camera);
+  easeIntoQueues(env, queued, travelling);
+  drawPills(env, [...queued.map(([, spot]) => spot), ...travelling]);
+}
+
+/**
+ * Packets glide into their place in a queue instead of jumping there: from
+ * where they were last drawn (the end of the link they came in on, or the
+ * site itself for a new one), and forward again as the queue moves up.
+ * Positions are kept in world units, so a camera change doesn't make them
+ * slide. The state lives on `ui.packetEase`; without a ui it does nothing.
+ */
+export function easeIntoQueues(env, queued, travelling) {
+  const { world, camera, ui, now } = env;
+  if (!ui) return;
+  let state = ui.packetEase;
+  if (!state || state.world !== world) state = ui.packetEase = { world, last: now, at: new Map() };
+  const dt = Math.min(0.1, Math.max(0, now - state.last));
+  state.last = now;
+  const follow = 1 - Math.exp(-MOTION.queueEase * dt);
+  const seen = new Map();
+  for (const spot of travelling) seen.set(spot.packet.id, screenToWorld(camera, spot.x, spot.y));
+  for (const [site, spot] of queued) {
+    const target = screenToWorld(camera, spot.x, spot.y);
+    const from = state.at.get(spot.packet.id) ?? { x: site.x, y: site.y };
+    const dx = target.x - from.x;
+    const dy = target.y - from.y;
+    const cur = Math.hypot(dx, dy) < 0.05 ? target : { x: from.x + dx * follow, y: from.y + dy * follow };
+    seen.set(spot.packet.id, cur);
+    const p = worldToScreen(camera, cur.x, cur.y);
+    spot.x = p.x;
+    spot.y = p.y;
+  }
+  state.at = seen;
 }
 
 /** Where each travelling packet is drawn on screen: [{ packet, x, y, r, w, h, angle, scale }]. */

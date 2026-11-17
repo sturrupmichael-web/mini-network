@@ -7,6 +7,7 @@ import { isStarving } from "../sim/sites.js";
 import { playTimelapse, saveImage } from "./timelapse.js";
 import { busiestHtml, endedHtml, runReport, weekChartHtml } from "./report.js";
 import { clock } from "../sim/progression.js";
+import { MOTION } from "../../data/theme.js";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -173,6 +174,7 @@ export function createHud(root, opts) {
   const q = (name) => root.querySelector(`[data-hud="${name}"]`);
   const el = {
     score: q("score"),
+    clock: q("clock"),
     clockText: q("clock-text"),
     dial: q("dial"),
     hint: q("hint"),
@@ -400,6 +402,13 @@ export function createHud(root, opts) {
         shown.dial = dial;
         el.dial.style.setProperty("--week", `${dial}%`);
         el.dial.style.setProperty("--day", `${Math.round(c.dayFraction * 100)}%`);
+      }
+      // The week's last day: the clock pulses gently until the week ends.
+      const lastDay = !world.over && c.dayOfWeek === world.config.time.daysPerWeek - 1;
+      if (lastDay !== shown.lastDay) {
+        shown.lastDay = lastDay;
+        el.clock.style.setProperty("--last-day-pulse", `${MOTION.lastDayPulseS}s`);
+        el.clock.classList.toggle("is-last-day", lastDay);
       }
       if (shown.paused !== loop.paused || shown.speed !== loop.speed) {
         shown.paused = loop.paused;
