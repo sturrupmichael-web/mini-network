@@ -29,11 +29,12 @@ export function warmupFactor(world) {
 }
 
 /** Seconds until a site's next packet, scaled by the calm start, traffic growth and time of day. */
-export function randomInterval(world, def) {
+export function randomInterval(world, def, site = null) {
   const [min, max] = def.packetInterval;
   const activity = isNight(world) ? def.activity.night : def.activity.day;
   const scale = world.config.spawn.packetIntervalScale * world.trafficScale * warmupFactor(world);
-  return (world.rng.range(min, max) * scale) / Math.max(activity, 0.01);
+  const grown = site?.grown ? world.config.siteGrowth.intervalScale : 1;
+  return (world.rng.range(min, max) * scale * grown) / Math.max(activity, 0.01);
 }
 
 export function addSite(world, type, x, y, label = null) {
@@ -53,6 +54,20 @@ export function addSite(world, type, x, y, label = null) {
     overload: 0,
     born: world.time,
     sdwan: false,
+    /** Switches only: upgraded to a core router (see switchRate). */
+    core: false,
+    /** Switches only: has a QoS policy (priority traffic goes first). */
+    qos: false,
+    /** Switches only: game time the switch is free to forward the next packet. */
+    busyUntil: 0,
+    /** Switches only, for drawing: 0–1, how jammed it has been lately. */
+    jam: 0,
+    /** Hungry district hubs only: hunger pips (0 to config.hunger.maxPips). */
+    hunger: 0,
+    /** Packets this site sent that were delivered (for growing). */
+    served: 0,
+    /** Has grown into a bigger, busier site (config.siteGrowth). */
+    grown: false,
     nextSpawn: def.packetInterval
       ? world.time + (world.tick > 0 ? (world.config.spawn.newSiteGrace ?? 0) : world.config.spawn.graceSeconds) + randomInterval(world, def)
       : Infinity,
@@ -71,9 +86,70 @@ export function deleteSite(world, siteId) {
   world.routing.dirty = true;
 }
 
+/**
+ * Size-1 packets per second a switch can forward, across all its links.
+ * Plain switches slow down as more links meet at them; core routers don't.
+ */
+export function switchRate(world, site) {
+  const c = world.config.switches;
+  if (site.core) return c.coreForwardRate;
+  return c.forwardRate / (1 + c.crowdPenalty * Math.max(0, site.links.length - 2));
+}
+
+/**
+ * Seconds a switch is busy forwarding this packet. With a QoS policy,
+ * priority traffic is quicker and everything else slower.
+ */
+export function switchTime(world, site, packet) {
+  let t = packet.size / switchRate(world, site);
+  if (site.qos) t *= world.data.traffic[packet.traffic].priority ? world.config.qos.priorityCost : world.config.qos.otherCost;
+  return t;
+}
+
 /** Packets a site can queue before it starts to overload. */
 export function siteCapacity(world, site) {
-  return world.data.sites[site.type].capacity + world.bonus.capacity;
+  const grown = site.grown ? world.config.siteGrowth.capacity : 0;
+  return world.data.sites[site.type].capacity + world.bonus.capacity + grown;
+}
+
+/** Is this hungry hub out of patience (all its pips full)? */
+export function isStarving(world, site) {
+  return site.hunger >= world.config.hunger.maxPips;
+}
+
+/**
+ * Every tick: hungry district hubs get hungrier while nothing that could
+ * feed them is being delivered.
+ */
+export function updateHunger(world) {
+  const h = world.config.hunger;
+  for (const site of world.sites) {
+    if (!world.data.sites[site.type].hungry) continue;
+    if (world.time - site.born < h.startDelay) continue;
+    // Only once its district has formed: a site that sends it traffic has
+    // settled in nearby (so there's something sensible to connect).
+    const reach = world.config.districts.radius * 1.2;
+    const settle = world.config.spawn.newSiteGrace ?? 0;
+    const fed = world.sites.some(
+      (s) =>
+        world.data.sites[s.type].district === site.type &&
+        world.time - s.born >= settle &&
+        Math.hypot(s.x - site.x, s.y - site.y) <= reach,
+    );
+    if (!fed) continue;
+    site.hunger = Math.min(h.maxPips, site.hunger + world.dt / h.secondsPerPip);
+  }
+}
+
+/** A packet from `origin` was delivered at `dest`: feed the hub, grow the sender. */
+export function recordDelivery(world, origin, dest) {
+  if (world.data.sites[dest.type].hungry) dest.hunger = Math.max(0, dest.hunger - 1);
+  if (!origin || origin.grown || !world.data.sites[origin.type].grows) return;
+  origin.served++;
+  if (origin.served >= world.config.siteGrowth.deliveries) {
+    origin.grown = true;
+    world.events.push({ type: "site-grew", siteId: origin.id });
+  }
 }
 
 /**
@@ -104,6 +180,24 @@ export function siteMatches(site, key) {
 export function destinationExists(world, key, settled = false) {
   const cutoff = settled ? world.time - world.config.spawn.newDestinationDelay : Infinity;
   return world.sites.some((s) => siteMatches(s, key) && (s.born === 0 || s.born <= cutoff));
+}
+
+/** Every data center (a map can have more than one). */
+export function hubSites(world) {
+  return world.sites.filter((s) => world.data.sites[s.type].shape === "hub");
+}
+
+/**
+ * The middle of the network: the data center, or the point halfway between
+ * them on a map with several. The map's centre if there are none.
+ */
+export function hubCentre(world) {
+  const hubs = hubSites(world);
+  if (hubs.length === 0) return { x: world.map.width / 2, y: world.map.height / 2 };
+  return {
+    x: hubs.reduce((t, h) => t + h.x, 0) / hubs.length,
+    y: hubs.reduce((t, h) => t + h.y, 0) / hubs.length,
+  };
 }
 
 /** The first data center (the "HQ" broadcasts come from). */

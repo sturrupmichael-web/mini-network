@@ -1,4 +1,4 @@
-# Mini Network architecture
+# Nano Networks architecture
 
 This is the map of the code as of Phase 5. It's meant to stay current as
 phases land.
@@ -15,7 +15,7 @@ data/ (content + balance)       src/
   events.js           │            links.js     links, tiers, firewalls, leased lines
   equipment.js        │            packets.js   spawning, dispatch, movement, drops
   modes.js            │            routing.js   congestion-aware shortest paths, cut links
-  theme.js ───────┐   │            equipment.js switches, SD-WAN
+  theme.js ───────┐   │            equipment.js switches, core routers, SD-WAN
                   │   │            events.js    event schedule and effects
                   │   │            progression.js  clock, new sites, traffic growth, rewards
                   │   │            geometry.js  45°/90° metro paths, points along a path
@@ -84,6 +84,10 @@ land between ticks.
 | Drag (or tap, then tap) a bandwidth upgrade onto a link | `upgradeLink` |
 | ...a firewall onto a link | `addFirewall` |
 | ...an SD-WAN box onto a site | `addSdwan` |
+| ...a core router onto a switch | `addCoreRouter` |
+| ...a QoS policy onto a switch | `addQos` |
+| ...a backbone onto a link | `makeBackbone` |
+| Drag a link onto empty map | `reshapeLink` |
 | ...a switch onto empty map / onto a link | `placeSwitch` / `placeSwitchOnLink` |
 | Tap a switch, then its × (or right-click it) | `removeSwitch` |
 | Pick a weekly reward | `chooseReward` |
@@ -104,6 +108,60 @@ land between ticks.
 - **Cuts and SD-WAN**: a cut link carries nothing. Sites with SD-WAN route
   around it at once; everyone else learns after
   `failover.convergenceSeconds`.
+- **Jammed switches**: a switch forwards one packet at a time, at
+  `switchRate` (`sites.js`): `switches.forwardRate`, slowed by
+  `switches.crowdPenalty` for every link past the second. `dispatchQueues`
+  holds packets at a switch until its `busyUntil`, and the existing queue
+  cost in routing steers traffic around it. `site.jam` (0–1, drawing only)
+  rises while packets wait and fades after; the renderer draws it as an
+  amber glow. A **core router** (`addCoreRouter`, the `routers` item) sets
+  `site.core`: `switches.coreForwardRate`, no crowd penalty, drawn purple
+  and a bit bigger. Removing the switch refunds the router.
+- **QoS policies** (`addQos`, the `qos` item) set `site.qos` on a switch.
+  `dispatchQueues` then looks at `priority` traffic (VoIP, payments) first,
+  and `switchTime` scales its switching time by `qos.priorityCost` and
+  everything else by `qos.otherCost`. Drawn as a teal chevron badge.
+- **Districts**: the `district` event effect opens a district hub
+  (`logistics`, `payhub`: `shape: "district"`, labelled) with `farSpot`.
+  ERP and payments go to `["datacenter", "logistics"]` /
+  `["datacenter", "payhub"]`, whichever is cheaper. Site types with a
+  `district` (warehouse, retail) appear within `districts.radius` of one of
+  their hubs `districts.chance` of the time (`findSiteSpot(world, type)`;
+  new sites now pick their type before their spot).
+- **Backbones** (`makeBackbone`, the `backbone` item): a link becomes a
+  straight two-point path over terrain and boundaries; its squares and
+  leased lines are refunded (`cost` and `leased` go to 0), it runs at the
+  top tier's bandwidth, and `linkSpeed` makes packets on it move
+  `backbone.speed` times faster (routing divides its length by that too).
+  Switches can't split it, it can't be rerouted or upgraded, and removing
+  it refunds the backbone. Drawn wider with a dashed centre line.
+- **Hunger**: `hungry` site types (the district hubs) gain a pip every
+  `hunger.secondsPerPip` once they're `hunger.startDelay` old and a settled
+  site of their district is within 1.2 × `districts.radius`
+  (`updateHunger`). Each delivery there removes one (`recordDelivery`). At
+  `hunger.maxPips` the hub counts as over capacity, so its overload ring
+  fills (`isStarving`). Drawn as a row of dots above the hub.
+- **Growing sites**: `grows` site types count delivered packets they sent
+  (`site.served`). At `siteGrowth.deliveries` they grow once: `site.grown`
+  scales their drawn size, packet interval and capacity, and a
+  `site-grew` event plays a triple pop.
+- **Bending links**: dragging a link and letting go on empty map calls
+  `reshapeLink(world, id, { x, y })`: the same link (tier, firewall,
+  colour) gets the path `autoCells(a → spot) + autoCells(spot → b)`, and
+  the squares and leased lines are settled against the old path. Letting go
+  on a site still calls `rerouteLink`.
+- **Timelapse**: `history.js` records a frame of the network (sites and
+  link paths) at the start of each day and at game over, in
+  `world.history` (left out of snapshots). `ui/timelapse.js` plays it on
+  the game-over card and saves the last frame as a PNG. Frames keep site
+  ids and link ends so the busiest link can be outlined and the site that
+  went down ringed.
+- **Run report**: `runstats.js` counts packets delivered per week
+  (`stats.weekly`) and packets each pair of linked sites carried
+  (`stats.carried`, keyed by site pair so bending, rerouting or making a
+  backbone keeps the count). `ui/report.js` turns that into the game-over
+  card's weekly bar chart, busiest link and "ended the run" rows; the
+  renderer lifts the busiest link out of the game-over dimming.
 - **Hop limits**: traffic with `maxHops` (VoIP, payments) is dropped if it
   needs more hops: lost points plus `drops.overloadPenalty` on that site's ring.
 - **Day/night**: sites' `activity` multiplies their packet rate; traffic
@@ -119,10 +177,19 @@ land between ticks.
 - **Title screen** (`ui/title.js`): pick a mode and a map, see your best
   score for that pair, Play. While it's open a preview game runs behind it.
   The in-game menu button pauses and reopens it with Resume.
-- **Maps** (`data/maps.js`): Florida Region, Coast to Coast and Campus.
+- **Maps** (`data/maps.js`): nine handcrafted maps, in unlock order.
   A map's optional `tuning` is merged over `config.js` section by section
   (`sim/config.js` `configForMap`), so maps can change spacing, growth,
-  links or inventory without code.
+  links or inventory without code. `dataForMap` (applied in `createWorld`,
+  so `world.data` is per map) applies a map's `events` and `siteUnlock`
+  overrides. Terrain areas can have `holes`. A map may start with several
+  data centers: growth picks one at random, the view centres between them
+  (`hubCentre`), and broadcasts come from each site's nearest one.
+- **Unlocks** (`src/unlocks.js`): maps open in order. Surviving
+  `config.unlocks.goalDays` (or a map's `goalDays`) in a mode with outages
+  and scores marks the map beaten (storage key `beatenMaps`) and opens the
+  next; `game.js` `checkGoal` shows a ticker the first time. Maps a player
+  already has a Classic score on stay open.
 - **Modes** (`data/modes.js`): Classic; Zen (`outages: false`, so
   `isHalted` never ends the game and no scores are kept); Daily challenge
   (`daily.js` hashes today's date to a map and seed `daily-YYYY-MM-DD`;
@@ -132,16 +199,18 @@ land between ticks.
   `mode:map` or `daily:date`.
 - **Settings** stored under `settings`: `{ speed, muted, theme }`. Theme is
   `system`, `light` or `dark`; it sets `data-theme` on `<html>` (CSS
-  variables) and `ui.theme` (canvas palette from `THEME.light` /
-  `THEME.dark`).
+  variables) and `ui.theme` (canvas palette from `mapColors(theme, map.palette)`
+  in `data/theme.js`).
 - **Audio** (`audio/audio.js`, `data/audio.js`): all sound is generated with
   Web Audio, no files. Each delivery plays a note of a pentatonic scale
   picked by traffic type, snapped to a beat (`createBeatQueue`) and capped
   per beat. Cues play for new sites, events, rewards and game over. Audio
   starts on the first tap (browser rule) and respects the mute setting.
-- **Animation**: sites scale in, links draw along their path over
-  `theme.linkAppearSeconds` of real time, and deliveries pop. These are
-  render-only (real time, not game ticks), so they never affect the sim.
+- **Animation** (`MOTION` in `data/theme.js`): sites scale in with a small
+  overshoot, links snap in tile by tile and removed links shrink to their
+  midpoint, delivered packets shrink into the site, ticket pins pop in, and
+  a ring timer pulses once it is 75% full. These are render-only (real time,
+  not game ticks), so they never affect the sim.
 - **URL parameters**: `?seed=` skips the title and starts that seed; add
   `&map=campus` and/or `&mode=zen` to pick the map or mode.
 
@@ -153,9 +222,22 @@ land between ticks.
   running world (`world.config = { ...config, links: { ...links, bandwidth } }`)
   because sections can be shared with `data/config.js`; a new game starts
   from the data again.
-- **Site colours**: each site type has a `color` in `data/sites.js`; every
-  site is drawn filled with it, with a white outline and a soft shadow
-  (`THEME.*.siteOutline`, `siteShadow`).
+- **Look** (see `docs/style-guide.md`): flat, rounded pieces with no
+  outlines, depth only from soft drop shadows in five tiers
+  (`SHADOW.tier`), and colour only for gameplay. Sites and traffic name a
+  colour from the guide's node palette (`node` in `data/sites.js` and
+  `data/traffic.js`, day/night values in `NODE`); a site shares its colour
+  with the traffic headed for it, and the data center, switches, links and
+  all UI chrome are neutral. Senders are drawn as workstations (rounded
+  squares with a "monitor"), destinations as servers (rack stripes),
+  switches as roundabouts; packets are pills, hunger is ticket pins.
+  Each map picks a ground palette (`palette` in `data/maps.js`); the dark
+  theme uses the night palette everywhere.
+- **Rendering performance**: the ground, zones and grid dots are drawn to a
+  cached layer, and the cables (with their blurred shadows) to another;
+  each is redrawn only when its key (camera, theme, links and their state)
+  changes. Sites are drawn from sprites with the shadow baked in. Packets,
+  pins and rings are drawn every frame with cheap unblurred shadows.
 - **Tray tooltips**: each item in `data/equipment.js` has a `tip`. The HUD
   shows it on mouse hover (listening on the tray, since disabled buttons get
   no pointer events), on keyboard focus, and for 2.5 s after a touch press,
@@ -167,8 +249,10 @@ land between ticks.
 
 - Days last `time.secondsPerDay` game seconds. Each new day adds
   `links.perDay` links.
-- Each week ends with a pause and two different rewards from
-  `data/rewards.js` (weighted, filtered by `fromWeek`). Traffic intervals
+- Each week ends with a pause. The weekly delivery (`rewards.weekly`, links
+  by default) goes straight into the inventory and is shown on the card,
+  then you pick one of two different rewards from `data/rewards.js`
+  (weighted, filtered by `fromWeek`). Cards show each grant as tray icons. Traffic intervals
   shrink by `spawn.weeklyIntervalMultiplier`.
 - New sites appear every `growth.interval` seconds, shrinking by
   `growth.intervalDecay` each time down to `growth.minInterval`. A spot is
@@ -202,6 +286,12 @@ It avoids going straight back where it came from unless that's the only way.
   Map from cell key to kind, built once in `createWorld`). Links can't
   cross those squares, switches can't go on them, and new sites keep a
   square away. The validator checks starting sites are clear.
+- **Drawing terrain**: each kind is a flat, soft-edged blob in its own
+  palette colour (water the "security zone", hills the "wall/floor zone",
+  parks a green tint): outside corners are rounded and inside corners
+  filled, drawn in world space (so it's right when the camera is turned).
+  When a drag bumps into terrain,
+  `pointer.js` sets `ui.blockedCell` and the renderer flashes that square.
 - **The open area** (`world.view`, `sim/view.js`): starts at
   `growth.viewStart` of the map around HQ and grows by `growth.viewPerSite`
   per added site; it always includes every site plus `growth.viewPadding`,
@@ -233,7 +323,8 @@ clear, else a breadth-first search around sites.
 
 Each direction has its own bandwidth: after sending a packet of size `s`,
 that direction is busy for `s / bandwidth` seconds. Each drag gesture gets
-the next line colour.
+the next line number (`link.line`); links are all drawn in the neutral
+cable colour, so it no longer shows.
 
 ## Config schema (data/)
 
@@ -246,7 +337,7 @@ commented in the file itself; this is the overview.
 | `sites.js` | `SITE_TYPES` | `{ id: { name, shape, color, size, capacity, packetInterval, traffic: { trafficId: weight }, activity: { day, night }, burst, unlockDay, junction? } }` |
 | `traffic.js` | `TRAFFIC_TYPES` | `{ id: { name, color, shape, size, to, points, unlockDay, hours, maxHops?, dropPoints?, cloudShare?, junk? } }` |
 | `maps.js` | `MAPS` | `[{ id, name, width, height, start: [{ type, x, y, label? }], boundaries: [[[x,y], …]] }]` |
-| `rewards.js` | `REWARDS` | `[{ id, label, detail, weight, fromWeek, grant: { links?, upgrades?, switches?, firewalls?, sdwan?, leased?, capacity? } }]` |
+| `rewards.js` | `REWARDS` | `[{ id, label, detail, weight, fromWeek, grant: { links?, upgrades?, switches?, firewalls?, sdwan?, leased?, routers?, capacity? } }]` |
 | `events.js` | `EVENTS` | `[{ id, name, toasts, effect, schedule: { day, every? } or { weekday, fromWeek }, duration, params }]` |
 | `equipment.js` | `LINK_TIERS`, `ITEMS` | Link tiers `{ id, name, bandwidth, width }`; tray items `{ name, hint, tip, target }` |
 | `maps.js` tuning | `tuning` | Per-map overrides of any `config.js` section |
@@ -267,7 +358,8 @@ logs a warning.
 
 `dev.html` loads `src/main.js` and `styles/main.css` directly.
 `npm run build` (`build.mjs`) bundles and minifies with esbuild, inlines the
-JS and CSS into `index.html`, writes a CSP with the scripts' sha256 hashes,
+JS and CSS into `index.html` (the DM Sans font in `styles/fonts`, SIL Open
+Font License, goes in as a data: URL), writes a CSP with the scripts' sha256 hashes,
 and fails if any `src`/`href` in `dev.html` still points at a file.
 
 ## Tests
@@ -275,3 +367,59 @@ and fails if any `src`/`href` in `dev.html` still points at a file.
 `npm test` runs `tests/*.test.mjs`. Browser files (`export const browser =
 true`) run three times: `dev.html` over http, the built `index.html` over
 http, and `index.html` from disk. Any console error fails a browser test.
+
+## Warnings, tutorial and replays
+
+- **Almost full**: when a site's ring passes `overload.warnAt` (classic and
+  daily only), the sim emits `overload-warning` once per climb; `game.js`
+  plays the `warning` cue and the ring glows and pulses faster. Sites with a
+  filling ring that are off screen or under the HUD get an arrow at the
+  edge (`offscreenArrow` in the renderer, using `ui.insets`).
+- **Tutorial** (`src/tutorial.js`): three prompts on the first game started
+  from the title (link a site, steer around terrain, use gear), shown by
+  `hud.coach`. Finishing or skipping sets `tutorialDone` in storage. URL
+  replays (`?seed=`) and the daily challenge never show it.
+- **Replays**: the game-over card has "Same seed" (not for the daily), which
+  replays that game once; "Play again" picks a new seed. The title screen's
+  map cards show each map's best for the chosen mode.
+
+## Tap to explain
+
+A tap or click (no drag) on anything on the map shows a small card saying
+what it is. `input/pointer.js` works out what was under the pointer (a site,
+a link, a packet travelling or queued, terrain, a carrier boundary, or the
+closed part of the map, using `packetAt` from the renderer for packets) and
+calls `onInspect`. `ui/inspect.js` (pure, tested in node) turns that into a
+title, an icon, a description, and one extra line for each thing happening
+to it right now: overload ring, queue, hunger pips, growth, jam, core router,
+QoS, SD-WAN, cut, blocked, firewall, backbone, leased lines. The text lives
+in `data/info.js`, and the data check fails if a site type, traffic type,
+link tier or terrain kind has no description. The HUD card
+(`hud.showInfo`) sits above the tap point, has `pointer-events: none` so
+drawing carries on straight through it, hides on the next press, and fades
+after `config.input.infoSeconds`.
+
+## Google sign-in and online leaderboards
+
+Same setup as Michael's other games (Oath of Stur, Helpdesk Survivors): the
+shared Supabase project, Google as the only sign-in, no SDK.
+
+- `src/online/auth.js`: `signIn()` sends the page to Supabase's
+  `/auth/v1/authorize?provider=google`, which comes back to this page with
+  the session in the URL hash; `init()` keeps it (storage key `auth`) and
+  cleans the address bar. `rest()` refreshes the session when it's close to
+  expiring. Sign-in is hidden inside frames (the claude.ai preview) and on
+  file://, where Google can't return to the page.
+- `src/online/leaderboard.js`: the board (`rpc/nn_leaderboard`, readable
+  signed out), the player's best and rank (`rpc/nn_my_best`), the name in the
+  shared `players` table (the same name as in the other games), and posting
+  a run to `nn_scores`. A run finished while signed out is kept as
+  `pendingScore` and posts after the player signs in and has a name.
+- `src/ui/online.js`: the account line on the title screen, the leaderboard
+  card (one board per map), the pick-a-name card, and the game-over line.
+- Only Classic runs post (Zen has no outages; the daily is one map per day).
+- The database side is `supabase/migrations/20261116120000_nano_networks_scores.sql`
+  (applied 2026-11-16). The stamp trigger sets who posted and their name, so
+  a client can only post as itself; it also rate-limits posts. Scores are
+  trusted from the client, as in the other games.
+- The CSP's `connect-src` allows the Supabase project URL (dev.html and build.mjs).

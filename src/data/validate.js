@@ -3,10 +3,13 @@
  * something that exists. Returns a list of human-readable problems (empty
  * when all is well). Used by the tests, and at startup in the browser.
  */
-const SITE_SHAPES = ["hub", "circle", "square", "triangle", "cloud", "edge", "switch"];
+const SITE_SHAPES = ["hub", "circle", "square", "triangle", "cloud", "edge", "switch", "district"];
 const PACKET_SHAPES = ["circle", "square", "triangle", "diamond"];
 const HOURS = ["any", "day", "night"];
 const SCHEDULE_KEYS = ["day", "every", "weekday", "fromWeek"];
+/** Gameplay colour names (theme.js NODE_ORDER). */
+const NODE_NAMES = ["blue", "red", "yellow", "green", "purple", "teal", "orange", "pink"];
+const PALETTE_NAMES = ["office", "campus", "datacenter"];
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const isPos = (v) => isNum(v) && v > 0;
@@ -21,7 +24,7 @@ function pointInPolygon(x, y, poly) {
   return inside;
 }
 
-export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects, modes, audio, terrain }) {
+export function validateData({ config, sites, traffic, maps, rewards, rewardGrants, events, tiers, items, effects, modes, audio, terrain, info }) {
   const errors = [];
   const err = (msg) => errors.push(msg);
 
@@ -38,6 +41,28 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
   }
   if (Object.keys(config?.growth?.types ?? {}).length === 0) err("config.growth.types needs at least one site type");
   if (config?.overload?.seconds <= 0) err("config.overload.seconds must be > 0");
+  const warnAt = config?.overload?.warnAt;
+  if (!(warnAt > 0 && warnAt < 1)) err("config.overload.warnAt must be between 0 and 1");
+
+  // Terrain kinds.
+  for (const [id, t] of Object.entries(terrain ?? {})) {
+    if (typeof t?.name !== "string" || !t.name) err(`terrain.${id}.name is missing`);
+  }
+
+  // Tap-to-explain text: every site, traffic type, tier and terrain kind needs a line.
+  if (info) {
+    const need = [
+      ["sites", Object.keys(sites ?? {})],
+      ["traffic", Object.keys(traffic ?? {})],
+      ["tiers", (tiers ?? []).map((t) => t.id)],
+      ["terrain", Object.keys(terrain ?? {})],
+    ];
+    for (const [section, ids] of need) {
+      for (const id of ids) {
+        if (typeof info[section]?.[id] !== "string" || !info[section][id]) err(`info.${section}.${id} needs a description`);
+      }
+    }
+  }
 
   // Rewards.
   if (!Array.isArray(rewards) || rewards.length < 2) err("rewards must list at least two rewards");
@@ -58,6 +83,10 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
       if (!Number.isInteger(v) || v <= 0) err(`${at}.grant.${k} must be a whole number > 0`);
     }
   }
+  for (const [k, v] of Object.entries(config?.rewards?.weekly ?? {})) {
+    if (!(rewardGrants ?? []).includes(k)) err(`config.rewards.weekly has unknown key "${k}"`);
+    if (!Number.isInteger(v) || v <= 0) err(`config.rewards.weekly.${k} must be a whole number > 0`);
+  }
   if ((rewards ?? []).filter((r) => r.fromWeek === 1).length < 2) err("at least two rewards must be available from week 1");
 
   // Traffic types.
@@ -65,6 +94,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     const at = `traffic.${id}`;
     if (typeof t.name !== "string" || !t.name) err(`${at}.name is missing`);
     if (typeof t.color !== "string" || !t.color) err(`${at}.color is missing`);
+    if (t.node !== undefined && !NODE_NAMES.includes(t.node)) err(`${at}.node "${t.node}" must be one of ${NODE_NAMES.join(", ")}`);
     if (!PACKET_SHAPES.includes(t.shape)) err(`${at}.shape "${t.shape}" must be one of ${PACKET_SHAPES.join(", ")}`);
     if (!isPos(t.size)) err(`${at}.size must be > 0`);
     if (!isNum(t.points)) err(`${at}.points must be a number`);
@@ -76,6 +106,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     if (!Number.isInteger(t.unlockDay) || t.unlockDay < 0) err(`${at}.unlockDay must be a whole number ≥ 0`);
     if (!HOURS.includes(t.hours)) err(`${at}.hours must be one of ${HOURS.join(", ")}`);
     if (t.maxHops !== undefined && (!Number.isInteger(t.maxHops) || t.maxHops < 1)) err(`${at}.maxHops must be a whole number ≥ 1`);
+    if (t.priority !== undefined && typeof t.priority !== "boolean") err(`${at}.priority must be true or false`);
     if (t.dropPoints !== undefined && !isNum(t.dropPoints)) err(`${at}.dropPoints must be a number`);
   }
 
@@ -85,6 +116,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     if (typeof s.name !== "string" || !s.name) err(`${at}.name is missing`);
     if (!SITE_SHAPES.includes(s.shape)) err(`${at}.shape "${s.shape}" must be one of ${SITE_SHAPES.join(", ")}`);
     if (typeof s.color !== "string" || !s.color) err(`${at}.color must be a CSS colour string`);
+    if (s.node !== undefined && !NODE_NAMES.includes(s.node)) err(`${at}.node "${s.node}" must be one of ${NODE_NAMES.join(", ")}`);
     if (!isPos(s.size)) err(`${at}.size must be > 0`);
     if (!isPos(s.capacity)) err(`${at}.capacity must be > 0`);
     if (s.packetInterval !== null) {
@@ -112,6 +144,9 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
       }
     }
     if (!Number.isInteger(s.unlockDay) || s.unlockDay < 0) err(`${at}.unlockDay must be a whole number ≥ 0`);
+    if (s.district !== undefined && (!sites[s.district] || sites[s.district].packetInterval !== null)) {
+      err(`${at}.district must be a destination site type (one that creates no packets)`);
+    }
   }
   if (!Object.values(sites ?? {}).some((s) => s.shape === "hub")) err("sites needs a hub-shaped site type (the data center)");
   if (!Object.values(sites ?? {}).some((s) => s.junction)) err("sites needs a junction site type (the switch)");
@@ -178,6 +213,7 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
     else if (mapIds.has(m.id)) err(`${at}.id is a duplicate`);
     mapIds.add(m.id);
     if (typeof m.name !== "string" || !m.name) err(`${at}.name is missing`);
+    if (m.palette !== undefined && !PALETTE_NAMES.includes(m.palette)) err(`${at}.palette must be one of ${PALETTE_NAMES.join(", ")}`);
     if (!isPos(m.width) || !isPos(m.height)) err(`${at} needs a positive width and height`);
     if (!Array.isArray(m.start) || m.start.length === 0) {
       err(`${at}.start must list at least one site`);
@@ -218,6 +254,16 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
         else if (typeof v !== typeof config[section][k]) err(`${at}.tuning.${section}.${k} has the wrong type`);
       }
     }
+    const eventIds = new Set((events ?? []).map((e) => e.id));
+    for (const [id, o] of Object.entries(m.events ?? {})) {
+      if (!eventIds.has(id)) err(`${at}.events.${id} is not an event`);
+      else if (o !== false && (typeof o !== "object" || o === null)) err(`${at}.events.${id} must be false or an object`);
+    }
+    for (const [type, day] of Object.entries(m.siteUnlock ?? {})) {
+      if (!sites?.[type]) err(`${at}.siteUnlock.${type} is not a site type`);
+      else if (!isNum(day) || day < 0) err(`${at}.siteUnlock.${type} must be a day number (0 or more)`);
+    }
+    if (m.goalDays !== undefined && !isPos(m.goalDays)) err(`${at}.goalDays must be a positive number`);
     const cellSize = m.tuning?.grid?.cellSize ?? config?.grid?.cellSize ?? 1;
     for (const [j, area] of (m.terrain ?? []).entries()) {
       if (!terrain?.[area?.kind]) err(`${at}.terrain[${j}].kind "${area?.kind}" is not a terrain type`);
@@ -226,12 +272,19 @@ export function validateData({ config, sites, traffic, maps, rewards, rewardGran
         err(`${at}.terrain[${j}].points must be a list of at least three [x, y] points`);
         continue;
       }
+      const holes = area.holes ?? [];
+      if (!Array.isArray(holes) || !holes.every((h) => Array.isArray(h) && h.length >= 3 && h.every((p) => Array.isArray(p) && isNum(p[0]) && isNum(p[1])))) {
+        err(`${at}.terrain[${j}].holes must be a list of polygons`);
+        continue;
+      }
       // Starting sites need their square and the ones around it clear.
       for (const [si, s] of m.start.entries()) {
         const cx = (Math.floor(s.x / cellSize) + 0.5) * cellSize;
         const cy = (Math.floor(s.y / cellSize) + 0.5) * cellSize;
         for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-          if (pointInPolygon(cx + dx * cellSize, cy + dy * cellSize, pts)) {
+          const px = cx + dx * cellSize;
+          const py = cy + dy * cellSize;
+          if (pointInPolygon(px, py, pts) && !holes.some((h) => pointInPolygon(px, py, h))) {
             err(`${at}.start[${si}] is on or right next to terrain[${j}]`);
             break;
           }

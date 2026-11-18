@@ -56,7 +56,7 @@ export const tests = [
     });
     await page.locator('[data-hud="share"]').waitFor({ state: "visible" });
     const text = await page.locator('[data-hud="share-text"]').textContent();
-    assert(text.startsWith(`Mini Network daily ${r.daily}`), text);
+    assert(text.startsWith(`Nano Networks daily ${r.daily}`), text);
     assert(/[🟩🟨🟥]/u.test(text), "has the day grid");
     const best = await page.locator('[data-hud="over-best"]').textContent();
     assert(best === "New best score!", best);

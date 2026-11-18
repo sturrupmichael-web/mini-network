@@ -10,17 +10,20 @@
  * a tick, and re-exports the player actions so callers have one import.
  */
 import { createRng } from "../rng.js";
+import { recordFrame } from "./history.js";
 import { initEvents, updateEvents } from "./events.js";
 import { dispatchQueues, movePackets, spawnPackets } from "./packets.js";
 import { initProgression, updateProgression } from "./progression.js";
 import { computeRoutes } from "./routing.js";
-import { addSite, siteCapacity } from "./sites.js";
+import { addSite, isStarving, siteCapacity, updateHunger } from "./sites.js";
 import { buildTerrain } from "./grid.js";
 import { updateView } from "./view.js";
+import { dataForMap } from "./config.js";
 
 export { addSite, siteCapacity } from "./sites.js";
-export { addFirewall, addLink, findLink, removeLink, rerouteLink, upgradeLink } from "./links.js";
-export { addSdwan, placeSwitch, placeSwitchOnLink, removeSwitch } from "./equipment.js";
+export { addFirewall, addLink, findLink, makeBackbone, removeLink, reshapeLink, rerouteLink, upgradeLink } from "./links.js";
+export { addCoreRouter, addQos, addSdwan, placeSwitch, placeSwitchOnLink, removeSwitch } from "./equipment.js";
+export { busiestLink, weeklyDeliveries } from "./runstats.js";
 export { chooseReward } from "./progression.js";
 export { setEventSchedule, triggerEvent } from "./events.js";
 
@@ -33,7 +36,8 @@ export { setEventSchedule, triggerEvent } from "./events.js";
  * @param {number|string} opts.seed
  * @param {boolean} [opts.outages]  false for Zen mode: overloads never end the game.
  */
-export function createWorld({ config, data, map, seed, outages = true }) {
+export function createWorld({ config, data: baseData, map, seed, outages = true }) {
+  const data = dataForMap(baseData, map);
   const world = {
     config,
     data,
@@ -53,15 +57,33 @@ export function createWorld({ config, data, map, seed, outages = true }) {
     inventory: { links: config.links.startingCount, ...config.inventory },
     /** Permanent boosts from rewards. */
     bonus: { capacity: 0 },
-    stats: { spawned: 0, delivered: 0, score: 0, sitesAdded: 0, dropped: 0, filtered: 0, lost: 0 },
+    stats: {
+      spawned: 0,
+      delivered: 0,
+      score: 0,
+      sitesAdded: 0,
+      dropped: 0,
+      filtered: 0,
+      lost: 0,
+      /** Packets delivered in each week (index 0 is week 1); see runstats.js. */
+      weekly: [],
+      /** Packets carried by each pair of linked sites, keyed by pairKey(). */
+      carried: {},
+    },
     /** True once the security-rules event has happened (edge links need firewalls). */
     security: false,
     /** Fraction of cloud-eligible traffic sent to the cloud (after a migration). */
     cloudShare: 0,
     /** Set when the game ends: { siteId, time }. */
     over: null,
-    /** Set at the end of each week until the player picks: { week, options: [rewardId, rewardId] }. */
+    /**
+     * Set at the end of each week until the player picks:
+     * { week, options: [rewardId, rewardId], delivered: { links: 8 } }.
+     * `delivered` (config.rewards.weekly) is already in the inventory.
+     */
     pendingReward: null,
+    /** One frame per day for the game-over timelapse (see history.js). */
+    history: [],
     routing: { tables: new Map(), dirty: true, nextRecompute: 0 },
     /** For each day, the closest any site came to an outage (0–1): the daily share grid. */
     dayStress: [0],
@@ -98,23 +120,29 @@ export function step(world) {
   spawnPackets(world);
   dispatchQueues(world);
   movePackets(world);
+  updateHunger(world);
   updateOverload(world);
 }
 
 function updateOverload(world) {
-  const { seconds, recoveryRate } = world.config.overload;
+  const { seconds, recoveryRate, warnAt = 0.7 } = world.config.overload;
   let worst = 0;
   for (const site of world.sites) worst = Math.max(worst, site.overload / seconds);
   while (world.dayStress.length <= world.day) world.dayStress.push(0);
   world.dayStress[world.day] = Math.min(1, Math.max(world.dayStress[world.day], worst));
   for (const site of world.sites) {
-    const over = site.queue.length > siteCapacity(world, site);
+    const over = site.queue.length > siteCapacity(world, site) || isStarving(world, site);
     const before = site.overload;
     site.overload = over ? site.overload + world.dt : Math.max(0, site.overload - world.dt * recoveryRate);
     if (before === 0 && site.overload > 0) world.events.push({ type: "overload-start", siteId: site.id });
+    // "Almost full": once per climb past warnAt (only when an outage would end the game).
+    if (world.outages && before < seconds * warnAt && site.overload >= seconds * warnAt) {
+      world.events.push({ type: "overload-warning", siteId: site.id });
+    }
     if (site.overload >= seconds) {
       if (world.outages) {
         world.over = { siteId: site.id, time: world.time };
+        recordFrame(world);
         world.events.push({ type: "outage", siteId: site.id });
         return;
       }
@@ -146,8 +174,8 @@ export function snapshot(world) {
     stats: world.stats,
     dayStress: world.dayStress,
     inventory: world.inventory,
-    sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan]),
-    links: world.links.map((l) => [l.id, l.a, l.b, l.busyUntil, l.inTransit, l.tier, l.firewall, l.leased, l.down]),
+    sites: world.sites.map((s) => [s.id, s.type, s.x, s.y, s.queue, s.nextSpawn, s.links, s.overload, s.sdwan, s.core, s.qos, s.busyUntil, s.hunger, s.served, s.grown]),
+    links: world.links.map((l) => [l.id, l.a, l.b, l.busyUntil, l.inTransit, l.tier, l.firewall, l.leased, l.down, l.backbone, l.length]),
     packets: world.packets.map((p) => [p.id, p.traffic, p.to, p.at, p.linkId, p.dir, p.progress, p.hops]),
   });
 }

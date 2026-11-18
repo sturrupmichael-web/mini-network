@@ -6,7 +6,7 @@
  *
  * world.view is { x, y, width, height } in world units. It only grows.
  */
-import { hubSite } from "./sites.js";
+import { hubCentre } from "./sites.js";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -17,7 +17,7 @@ export function updateView(world) {
   const frac = Math.min(1, g.viewStart + g.viewPerSite * world.stats.sitesAdded);
   const width = map.width * frac;
   const height = map.height * frac;
-  const centre = hubSite(world) ?? { x: map.width / 2, y: map.height / 2 };
+  const centre = hubCentre(world);
   let x0 = clamp(centre.x - width / 2, 0, map.width - width);
   let y0 = clamp(centre.y - height / 2, 0, map.height - height);
   let x1 = x0 + width;

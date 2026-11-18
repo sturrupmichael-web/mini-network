@@ -14,13 +14,13 @@
  * that, only sites with an SD-WAN box know to avoid it; everyone else
  * keeps choosing it and their packets wait.
  */
-import { isBlocked } from "./links.js";
+import { isBlocked, linkSpeed } from "./links.js";
 import { siteMatches } from "./sites.js";
 
 /** Cost for a packet to cross `link` and arrive at site `to`. */
 export function hopCost(world, link, to) {
   const r = world.config.routing;
-  return link.length + r.hopCost + r.congestionWeight * link.inTransit + r.queueWeight * to.queue.length;
+  return link.length / linkSpeed(world, link) + r.hopCost + r.congestionWeight * link.inTransit + r.queueWeight * to.queue.length;
 }
 
 /** Has the whole network learned that this link is cut? */

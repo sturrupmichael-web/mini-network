@@ -3,28 +3,34 @@
  * This is the only module that knows about all of them.
  */
 import { GAME_DATA, SIM_DATA } from "../data/index.js";
+import { mapColors } from "../data/theme.js";
 import { createAudio } from "./audio/audio.js";
 import { dailyChallenge, shareText } from "./daily.js";
 import { attachPointerInput } from "./input/pointer.js";
+import { describe } from "./ui/inspect.js";
 import { createLoop } from "./loop.js";
 import { createCamera, fitCamera, worldToScreen } from "./render/camera.js";
 import { setupCanvas } from "./render/canvas.js";
-import { render } from "./render/renderer.js";
+import { lineColor, render, siteRemoveButtonPos } from "./render/renderer.js";
 import { pointAlong } from "./sim/geometry.js";
 import { configForMap } from "./sim/config.js";
 import { debugStats, grantItems, skipTime, spawnBurst, spawnSite } from "./sim/debug.js";
 import { chooseReward, clock } from "./sim/progression.js";
 import {
+  addCoreRouter,
+  addQos,
   addFirewall,
   addLink,
   addSdwan,
   createWorld,
+  makeBackbone,
   isHalted,
   placeSwitch,
   placeSwitchOnLink,
   removeLink,
   removeSwitch,
   rerouteLink,
+  reshapeLink,
   snapshot,
   step,
   triggerEvent,
@@ -32,9 +38,14 @@ import {
 } from "./sim/world.js";
 import { bestScore, recordScore, scoreKey } from "./scores.js";
 import { createStorage } from "./storage.js";
+import { createUnlocks } from "./unlocks.js";
 import { createDebugPanel } from "./ui/debug.js";
 import { createHud } from "./ui/hud.js";
 import { createTitle } from "./ui/title.js";
+import { createOnlineUi } from "./ui/online.js";
+import { createAuth } from "./online/auth.js";
+import { createLeaderboard } from "./online/leaderboard.js";
+import { createTutorial } from "./tutorial.js";
 
 const CONFIG = GAME_DATA.config;
 
@@ -55,6 +66,15 @@ const REFUSED_TEXT = {
   "on-boundary": "Switches can't sit on a carrier boundary.",
   "no-sdwan": "No SD-WAN boxes left.",
   "has-sdwan": "That site already has SD-WAN.",
+  "no-routers": "No core routers left.",
+  "not-a-switch": "That goes on a switch.",
+  "has-router": "That switch is already a core router.",
+  "no-qos": "No QoS policies left.",
+  "no-backbone": "No backbones left.",
+  "has-backbone": "That link is already a backbone.",
+  backbone: "Backbones only connect at their two ends.",
+  "backbone-max": "A backbone is already as fast as it gets.",
+  "has-qos": "That switch already has a QoS policy.",
 };
 
 /**
@@ -66,15 +86,21 @@ const REFUSED_TEXT = {
  * @param {object} [opts.autostart]  { modeId, mapId, seed } to skip the title screen
  *                                   (from the URL: ?seed=…&map=…&mode=…).
  * @param {boolean} [opts.debug]     Open the debug panel at start (?debug).
+ * @param {HTMLElement} [opts.onlineRoot]  Where the leaderboard cards go.
+ * @param {object} [opts.online]    { fetch, location, history } stand-ins (tests).
  */
-export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = null, debug = false }) {
+export function startGame({ canvas, hudRoot, titleRoot, onlineRoot = null, randomSeed, autostart = null, debug = false, online = {} }) {
   const storage = createStorage();
+  const auth = createAuth({ storage, ...online });
+  const signedIn = auth.init();
+  const leaderboard = createLeaderboard({ auth, storage });
   const settings = { speed: 1, muted: false, theme: "system", ...storage.get("settings", {}) };
   const saveSettings = () => storage.set("settings", settings);
   const data = SIM_DATA;
   const maps = GAME_DATA.maps;
   const modes = GAME_DATA.modes;
   const audio = createAudio(GAME_DATA.audio, { muted: settings.muted });
+  const unlocks = createUnlocks(storage, maps, CONFIG);
 
   const camera = createCamera();
   const ui = {
@@ -89,6 +115,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     pops: [],
   };
   let nextLineIndex = 0;
+  let tutorial = createTutorial(storage, false);
 
   /** The current game: { modeId, mapId, seed, daily, result } or null on the title screen. */
   let run = null;
@@ -102,7 +129,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     const dark = settings.theme === "dark" || (settings.theme === "system" && darkQuery?.matches);
     ui.theme = dark ? "dark" : "light";
     document.documentElement.dataset.theme = ui.theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#1d1e22" : "#f6f4ef");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#1F2329" : "#EFE9DC");
   }
   darkQuery?.addEventListener?.("change", applyTheme);
   applyTheme();
@@ -149,6 +176,8 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     if (moved) fit();
   }
 
+  // Space the HUD covers at the top and bottom (the renderer keeps off-screen arrows clear of it).
+  ui.insets = { top: CONFIG.view.hudTop, bottom: CONFIG.view.hudBottom, left: 0, right: 0 };
   const view = setupCanvas(canvas, (v) => fit(v));
   function fit(v = view) {
     fitCamera(
@@ -186,8 +215,12 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       if (!run && title.visible) preview(title.mapId);
       easeCamera(performance.now() / 1000);
       if (isHalted(world)) input.cancel();
+      if ((isHalted(world) || title.visible || !run) && hud.infoShown) hud.showInfo(null);
       if (run && world.over && !run.result) finishRun();
       handleEvents();
+      checkGoal();
+      if (run && tutorial.active) tutorial.update({ links: world.links.length });
+      hud.coach(run && !world.over ? tutorial.text : null);
       const now = performance.now() / 1000;
       ui.pops = ui.pops.filter((p) => now - p.born < 1);
       render(view.ctx, view, world, camera, ui, now);
@@ -210,19 +243,41 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
   /** Sounds and pops for what happened since the last frame. */
   function handleEvents() {
     const now = performance.now() / 1000;
+    // One chime however many sites appear at once (a district lands as a group).
+    if (world.events.some((e) => e.type === "site-added")) audio.spawned();
     for (const e of world.events) {
       if (e.type === "delivered") {
         audio.delivered(e.traffic);
         const site = world.siteById.get(e.siteId);
         if (site && ui.pops.length < 40) {
           const p = worldToScreen(camera, site.x, site.y);
-          ui.pops.push({ x: p.x, y: p.y, born: now, color: world.data.traffic[e.traffic].color });
+          ui.pops.push({ x: p.x, y: p.y, born: now, traffic: e.traffic });
         }
       } else if (e.type === "event") audio.cue("event");
       else if (e.type === "dropped") audio.cue("drop");
       else if (e.type === "outage") audio.cue("outage");
+      else if (e.type === "overload-warning") audio.cue("warning");
       else if (e.type === "week") audio.cue("reward");
     }
+  }
+
+  /**
+   * Beating a map: survive its goal days in a mode with outages and scores
+   * (Classic, Daily). The first time, it opens the next map.
+   */
+  function checkGoal() {
+    if (!run || run.beaten || world.over) return;
+    const mode = modes[run.modeId];
+    if (!mode.outages || !mode.scores) return;
+    if (clock(world).day < unlocks.goalDays(map)) return;
+    run.beaten = true;
+    const { first, opened } = unlocks.markBeaten(map.id);
+    if (!first) return;
+    audio.cue("reward");
+    hud.ticker(
+      `${map.name} beaten`,
+      opened ? `${opened.name} is now unlocked. Keep going for a high score.` : "Keep going for a high score.",
+    );
   }
 
   /** Record the score and build the share text, once, when a run ends. */
@@ -252,30 +307,53 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       });
     }
     run.result = result;
+    // Classic runs go on that map's online leaderboard.
+    onlineUi.runEnded(
+      mode.scores && !run.daily
+        ? { map: map.id, mapName: map.name, score: world.stats.score, days: Math.round(days * 10) / 10, seed: String(run.seed) }
+        : null,
+    );
   }
 
   /** Start a game. */
-  function startRun({ modeId, mapId, seed }) {
+  /**
+   * @param {object} choice  { modeId, mapId, seed }; `tutorial: false`
+   *                         skips the first-game tutorial (URL replays).
+   */
+  function startRun({ modeId, mapId, seed, tutorial: withTutorial = true, fixedSeed = Boolean(seed) }) {
     const mode = modes[modeId] ?? modes.classic;
     const daily = mode.daily ? dailyChallenge(maps) : null;
     map = maps.find((m) => m.id === (daily ? daily.mapId : mapId)) ?? maps[0];
     config = configForMap(CONFIG, map);
     const runSeed = daily ? daily.seed : (seed ?? randomSeed());
     world = createWorld({ config, data, map, seed: runSeed, outages: mode.outages });
-    run = { modeId: modes[modeId] ? modeId : "classic", mapId: map.id, seed: runSeed, daily: daily?.key ?? null, result: null, fixedSeed: Boolean(seed) };
+    run = {
+      modeId: modes[modeId] ? modeId : "classic",
+      mapId: map.id,
+      seed: runSeed,
+      daily: daily?.key ?? null,
+      result: null,
+      fixedSeed,
+      beaten: false,
+    };
     settleCamera();
     input.cancel();
     ui.selectedLinkId = null;
     ui.selectedSiteId = null;
     ui.pops = [];
     nextLineIndex = 0;
+    tutorial = createTutorial(storage, withTutorial && !daily);
     loop.paused = false;
     title.hide();
   }
 
-  function restart() {
+  /** Play again: a new seed, or the same one with { sameSeed: true }. */
+  function restart({ sameSeed = false } = {}) {
     if (!run) return;
-    startRun({ modeId: run.modeId, mapId: run.mapId, seed: run.fixedSeed ? run.seed : undefined });
+    const seed = sameSeed || run.fixedSeed ? run.seed : undefined;
+    // "Same seed" replays this game once; "Play again" afterwards is new again
+    // (unless the game came from a ?seed= URL, which always replays).
+    startRun({ modeId: run.modeId, mapId: run.mapId, seed, fixedSeed: run.fixedSeed, tutorial: !run.fixedSeed });
   }
 
   function openMenu() {
@@ -337,6 +415,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       applyTheme();
     },
     onShare: copyText,
+    onSkipTutorial: () => tutorial.skip(),
     onItemPointerDown: (item, e) => {
       if (e) input.startPlacement(item, e);
       else ui.armed = ui.armed === item ? null : item; // keyboard
@@ -353,6 +432,12 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       const daily = modes[modeId].daily ? dailyChallenge(maps).key : null;
       return bestScore(storage, scoreKey(modeId, mapId, daily));
     },
+    unlock: (mapId) => ({
+      open: unlocks.isUnlocked(mapId),
+      beaten: unlocks.isBeaten(mapId),
+      by: unlocks.unlockedBy(mapId)?.name ?? null,
+      goalDays: unlocks.goalDays(maps.find((m) => m.id === mapId)),
+    }),
     onPlay: (choice) => startRun(choice),
     onResume: resume,
     onSettings: (change) => {
@@ -364,7 +449,22 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       }
     },
     getSettings: () => settings,
+    onBoard: () => onlineUi.openBoard(title.mapId),
   });
+
+  const onlineHost = onlineRoot ?? titleRoot.parentElement.appendChild(document.createElement("div"));
+  onlineHost.classList.add("title-root");
+  const onlineUi = createOnlineUi(onlineHost, {
+    auth,
+    leaderboard,
+    maps,
+    accountSlot: title.accountSlot,
+    overSlot: hud.overOnlineSlot,
+    currentMapId: () => title.mapId,
+  });
+  onlineUi.refresh();
+  if (signedIn === "signed-in") onlineUi.afterSignIn();
+  else if (signedIn === "error" && auth.lastError) hud.toast(`Sign-in didn't work: ${auth.lastError}`);
 
   const debugPanel = createDebugPanel(hudRoot.parentElement, {
     siteTypes: Object.keys(GAME_DATA.sites).filter((t) => !GAME_DATA.sites[t].junction),
@@ -404,6 +504,9 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     if (item === "upgrades" && target.kind === "link") return upgradeLink(world, target.id);
     if (item === "firewalls" && target.kind === "link") return addFirewall(world, target.id);
     if (item === "sdwan" && target.kind === "site") return addSdwan(world, target.id);
+    if (item === "routers" && target.kind === "site") return addCoreRouter(world, target.id);
+    if (item === "qos" && target.kind === "site") return addQos(world, target.id);
+    if (item === "backbone" && target.kind === "link") return makeBackbone(world, target.id);
     if (item === "switches" && target.kind === "link") return placeSwitchOnLink(world, target.id, target.x, target.y);
     if (item === "switches" && target.kind === "spot") return placeSwitch(world, target.x, target.y);
     return { ok: false, reason: "bad-target" };
@@ -419,12 +522,30 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
       connect: (a, b, line, cells) => addLink(world, a, b, line, cells),
       remove: (linkId) => removeLink(world, linkId),
       reroute: (linkId, siteId) => rerouteLink(world, linkId, siteId),
+      reshape: (linkId, spot) => reshapeLink(world, linkId, spot),
       removeSite: (siteId) => removeSwitch(world, siteId),
-      place,
+      place: (item, target) => {
+        const r = place(item, target);
+        if (r?.ok) tutorial.placed();
+        return r;
+      },
       lineFor,
     },
     items: GAME_DATA.items,
     onRefused: (reason) => REFUSED_TEXT[reason] && hud.toast(REFUSED_TEXT[reason]),
+    onSquare: (squares, undo) => audio.tick(squares, undo),
+    onInspect: (target, at) => {
+      const card = describe(world, GAME_DATA.info, target, {
+        tiers: GAME_DATA.tiers,
+        terrain: GAME_DATA.terrain,
+        colors: mapColors(ui.theme, map.palette),
+        lineColor,
+        selected: target?.kind === "link" && ui.selectedLinkId === target.id,
+      });
+      const rect = canvas.getBoundingClientRect();
+      const point = at && { x: rect.left + at.x, y: rect.top + at.y };
+      hud.showInfo(card, point, ui.insets, CONFIG.input.infoSeconds * 1000);
+    },
   });
 
   // Audio can only start after the player touches something.
@@ -437,6 +558,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
   window.addEventListener("keydown", (e) => {
     // Leave keys alone in form fields and in dialogs (Space/Enter pick a reward there).
     if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, .overlay")) return;
+    if (onlineUi.open) return;
     if (e.code === "Backquote") {
       debugPanel.toggle();
       return;
@@ -467,7 +589,7 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     if (document.hidden && run) loop.paused = true;
   });
 
-  if (autostart) startRun(autostart);
+  if (autostart) startRun({ ...autostart, tutorial: false });
   else title.show();
   loop.start();
 
@@ -485,8 +607,14 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     get settings() {
       return settings;
     },
+    get tutorial() {
+      return tutorial;
+    },
     loop,
     camera,
+    auth,
+    leaderboard,
+    onlineUi,
     ui,
     audio,
     debugPanel,
@@ -496,6 +624,10 @@ export function startGame({ canvas, hudRoot, titleRoot, randomSeed, autostart = 
     sitePosition(id) {
       const site = world.siteById.get(id);
       return worldToScreen(camera, site.x, site.y);
+    },
+    /** Screen position of a selected switch's remove button (tests). */
+    siteRemoveButton(id) {
+      return siteRemoveButtonPos(world, world.siteById.get(id), camera);
     },
     /** Screen position of the point halfway along a link. */
     linkMidpoint(id) {

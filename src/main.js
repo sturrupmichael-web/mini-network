@@ -20,7 +20,7 @@ function randomSeed() {
 const problems = validateData({ ...GAME_DATA, effects: EFFECT_NAMES });
 if (problems.length) {
   // Bad data is a developer mistake: say exactly what's wrong.
-  console.warn(`Mini Network data problems:\n${problems.join("\n")}`);
+  console.warn(`Nano Networks data problems:\n${problems.join("\n")}`);
 }
 
 // ?seed=… (optionally with &map=… and &mode=…) skips the title screen and
@@ -29,6 +29,7 @@ const game = startGame({
   canvas: document.getElementById("game"),
   hudRoot: document.getElementById("hud"),
   titleRoot: document.getElementById("title"),
+  onlineRoot: document.getElementById("online"),
   randomSeed,
   autostart: urlSeed ? { seed: urlSeed, mapId: params.get("map") ?? undefined, modeId: params.get("mode") ?? "classic" } : null,
   // ?debug opens the tuning panel (the ` key toggles it too).

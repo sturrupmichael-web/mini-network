@@ -2,7 +2,8 @@
  * Builds the single self-contained index.html from dev.html:
  *   - bundles and minifies src/main.js (and everything it imports from src/
  *     and data/) with esbuild, and inlines it as a module script
- *   - minifies and inlines every local stylesheet
+ *   - minifies and inlines every local stylesheet, and the font files it
+ *     uses (as data: URLs)
  *   - replaces the CSP with one that allows exactly the inlined scripts
  *     (by sha256 hash)
  *   - fails if anything in dev.html still points at a local file
@@ -24,6 +25,7 @@ const CSP = (scriptHashes) =>
     `script-src 'self' ${scriptHashes.map((h) => `'${h}'`).join(" ")}`.trim(),
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
+    "font-src 'self' data:",
     "connect-src 'self' https://abeqdmurddrkrqbnfylb.supabase.co wss://abeqdmurddrkrqbnfylb.supabase.co",
     "object-src 'none'",
     "base-uri 'none'",
@@ -61,7 +63,8 @@ export async function build({ source, write = true } = {}) {
   for (const [tag] of linkTags) {
     const href = tag.match(/\bhref="([^"]+)"/)?.[1];
     if (!href || isExternal(href)) throw new Error(`dev.html has a stylesheet that can't be inlined: ${tag}`);
-    const css = await readFile(join(root, href), "utf8");
+    const cssPath = join(root, href);
+    const css = await inlineFonts(await readFile(cssPath, "utf8"), dirname(cssPath));
     const min = await esbuild.transform(css, { loader: "css", minify: true, target: "es2022" });
     if (/<\/style/i.test(min.code)) throw new Error(`${href} contains "</style"`);
     html = html.replace(tag, () => `<style>${min.code.trim()}</style>`);
@@ -89,6 +92,17 @@ export async function build({ source, write = true } = {}) {
 
   if (write) await writeFile(OUT, html);
   return { html, out: OUT, bytes: Buffer.byteLength(html), hashes };
+}
+
+/** Inline local font files a stylesheet points at (url(fonts/x.woff2)) as data: URLs. */
+async function inlineFonts(css, dir) {
+  const refs = [...css.matchAll(/url\(\s*["']?([^"')]+\.woff2)["']?\s*\)/g)];
+  for (const [match, file] of refs) {
+    if (isExternal(file) || file.startsWith("data:")) continue;
+    const data = await readFile(join(dir, file));
+    css = css.replace(match, () => `url("data:font/woff2;base64,${data.toString("base64")}")`);
+  }
+  return css;
 }
 
 function isExternal(url) {

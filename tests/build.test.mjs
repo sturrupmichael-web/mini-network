@@ -38,9 +38,9 @@ export const tests = [
   ["no absolute paths or other sites in the output", async () => {
     const { html } = await build({ write: false });
     assert.doesNotMatch(html, /\b(src|href)="\//);
-    // The one other site is the shared Supabase project behind the site's live player /
-    // visit counter (src/site-live.js).
+    // The only other site is the leaderboard API (fetched, never loaded as a file).
     assert.doesNotMatch(html, /https?:\/\/(?!www\.w3\.org|abeqdmurddrkrqbnfylb\.supabase\.co)/, "loads nothing from other sites");
+    assert.doesNotMatch(html, /(src|href)="https?:/, "no files from other sites");
   }],
   ["build fails if dev.html references a file that wasn't inlined", async () => {
     const broken = devHtml.replace("</body>", '<img src="images/logo.png" alt=""></body>');

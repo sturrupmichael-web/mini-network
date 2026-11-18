@@ -1,5 +1,5 @@
 /**
- * Mini Network balance and engine configuration.
+ * Nano Networks balance and engine configuration.
  *
  * Everything you might want to tune lives here (or in the other files in
  * data/). The engine never hard-codes a balance number.
@@ -62,11 +62,45 @@ export const CONFIG = {
     firewalls: 0,
     sdwan: 0,
     leased: 1,
+    routers: 0,
+    qos: 0,
+    backbone: 0,
   },
 
   switches: {
     /** Closest a switch may be placed to any site or other switch (wu). */
     minSpacing: 55,
+    /**
+     * Switches have to take turns: a switch forwards at most forwardRate
+     * size-1 packets per second, across all its links together. Every link
+     * beyond the second slows it down by crowdPenalty (0.25 = a quarter),
+     * so a switch with lots of links meeting at it jams first. Packets that
+     * are waiting their turn queue at the switch, and routing steers around
+     * long queues.
+     */
+    forwardRate: 4,
+    crowdPenalty: 0.25,
+    /** A switch upgraded to a core router forwards this many per second, however many links it has. */
+    coreForwardRate: 14,
+  },
+
+  backbone: {
+    /**
+     * A backbone link runs straight between its two ends, over terrain and
+     * carrier boundaries, at the top tier's bandwidth, and packets move
+     * along it this many times faster. Nothing can join it in the middle.
+     */
+    speed: 2.5,
+  },
+
+  qos: {
+    /**
+     * A switch with a QoS policy sends priority traffic (VoIP, payments)
+     * first, and it takes this fraction of the usual switching time...
+     */
+    priorityCost: 0.5,
+    /** ...while everything else takes this much longer than usual (the catch). */
+    otherCost: 1.3,
   },
 
   failover: {
@@ -98,7 +132,7 @@ export const CONFIG = {
     /**
      * Packets take the cheapest path to their destination. The cost of a
      * path is the sum of, for each hop:
-     *     link length (wu)
+     *     link length (wu), divided by its speed (backbones are faster)
      *   + hopCost
      *   + congestionWeight × packets currently travelling on that link
      *   + queueWeight × packets waiting at the site the hop arrives at
@@ -119,7 +153,7 @@ export const CONFIG = {
      * Global multiplier on every site's packet interval (see sites.js).
      * 1 = as written, 0.5 = packets twice as often.
      */
-    packetIntervalScale: 1,
+    packetIntervalScale: 1.15,
     /** Game seconds before the first packets appear. */
     graceSeconds: 4,
     /**
@@ -130,7 +164,7 @@ export const CONFIG = {
     warmupDays: 3,
     warmupScale: 2.5,
     /** Game seconds a newly arrived site waits before sending, so you have time to connect it. */
-    newSiteGrace: 10,
+    newSiteGrace: 13,
     /**
      * Traffic grows each week: packet intervals are multiplied by this at
      * the start of every new week (0.9 = 10% more traffic per week)...
@@ -143,7 +177,7 @@ export const CONFIG = {
      * region), sites wait this many seconds before sending traffic to it,
      * so you have time to connect it.
      */
-    newDestinationDelay: 20,
+    newDestinationDelay: 25,
   },
 
   grid: {
@@ -168,13 +202,13 @@ export const CONFIG = {
 
   growth: {
     /** Game seconds before the first new site appears. */
-    firstSiteAt: 40,
+    firstSiteAt: 50,
     /** Seconds between new sites at the start. */
-    interval: 40,
+    interval: 50,
     /** Each new site shortens the gap: interval × this, every time. */
     intervalDecay: 0.95,
     /** The gap never gets shorter than this many seconds. */
-    minInterval: 12,
+    minInterval: 15,
     /**
      * New sites appear within this distance (wu) of the data center at
      * first, so the network grows outward. The radius grows every day.
@@ -200,23 +234,83 @@ export const CONFIG = {
     types: { office: 5, warehouse: 2, retail: 2 },
   },
 
+  districts: {
+    /**
+     * Once a district hub (a logistics hub, a payment gateway) is on the
+     * map, a new site of the kind that clusters around it (see `district`
+     * in sites.js) appears within `radius` (wu) of it this often...
+     */
+    chance: 0.7,
+    radius: 260,
+  },
+
+  hunger: {
+    /**
+     * A district hub (hungry in sites.js) wants deliveries. Once it has
+     * been on the map for startDelay seconds and a site that could feed it
+     * has settled in nearby (within 1.2 × districts.radius), it gains a hunger pip every secondsPerPip seconds, and
+     * each packet delivered there takes one away. With maxPips pips its
+     * overload ring fills, just like a site whose queue is too long.
+     */
+    startDelay: 38,
+    secondsPerPip: 12,
+    maxPips: 5,
+  },
+
+  siteGrowth: {
+    /**
+     * A site that can grow (grows in sites.js) grows once this many of its
+     * packets have been delivered: it's drawn bigger, sends traffic more
+     * often, and queues more before it overloads.
+     */
+    deliveries: 60,
+    size: 1.3,
+    intervalScale: 0.7,
+    capacity: 4,
+  },
+
   overload: {
     /**
      * When a site's queue holds more packets than its capacity, its ring
      * timer fills. If it stays full for this many game seconds: outage,
      * game over.
      */
-    seconds: 20,
+    seconds: 25,
     /**
      * When the queue is back under capacity the timer drains at this many
      * seconds per second (2 = recovers twice as fast as it fills).
      */
     recoveryRate: 1.5,
+    /**
+     * When a ring passes this fraction of `seconds`, the site is "almost
+     * full": a warning sound plays once and the ring pulses faster. Sites
+     * off screen get an arrow at the edge pointing to them while their ring
+     * is filling.
+     */
+    warnAt: 0.7,
+  },
+
+  unlocks: {
+    /**
+     * Maps open one at a time, in the order they're listed in maps.js.
+     * Surviving this many days on a map (in Classic or the Daily challenge)
+     * beats it and opens the next one. A map can set its own goalDays.
+     * 14 = make it through two full weeks.
+     */
+    goalDays: 14,
+  },
+  rewards: {
+    /**
+     * Delivered at the end of every week before you pick a reward, so the
+     * pick is always about what kind of help you want, never about links
+     * vs. nothing. Keys are inventory items (like a reward's grant).
+     */
+    weekly: { links: 8 },
   },
 
   time: {
     /** Game seconds in one in-game day (a day at 1× takes this long). */
-    secondsPerDay: 30,
+    secondsPerDay: 38,
     /** Days per week. The game pauses for a reward at the end of each week. */
     daysPerWeek: 7,
   },
@@ -240,6 +334,11 @@ export const CONFIG = {
     /** How close (px) a dropped tray item must land to a link or site to apply to it. */
     mouseDropRadius: 16,
     touchDropRadius: 30,
+    /** How close (px) a tap must be to a packet to explain it instead of the link or map under it. */
+    mousePacketRadius: 4,
+    touchPacketRadius: 8,
+    /** How long (ms) the tap-to-explain card stays up if you don't tap again. */
+    infoSeconds: 9,
   },
 
   view: {

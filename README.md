@@ -1,4 +1,8 @@
-# Mini Network
+# Nano Networks
+
+(Formerly Mini Network. The repo, the `/mini-network/` web address, the
+`miniNetwork:` storage keys and the `window.miniNetwork` test handle keep
+the old name, so links, saved scores and settings carry over.)
 
 A minimal network-building puzzle game for the browser. Offices, warehouses
 and shops pop up on a map and start sending traffic; you draw links to keep
@@ -18,7 +22,10 @@ Open <http://localhost:8000/dev.html>. `dev.html` loads the source files
 directly, so just reload after an edit.
 
 The title screen lets you pick a mode (Classic, Zen, Daily challenge) and a
-map (Florida Region, Coast to Coast, Campus). The gear opens settings
+map. There are nine: Florida Region, Campus, Lake Ring, Coast to Coast, Port
+Town, The Pass, Downtown, Twin Cities and Archipelago. They open one at a
+time: survive two weeks on a map in Classic or the Daily challenge to unlock
+the next (the daily challenge can be on any map). The gear opens settings
 (sound, and an Auto/Light/Dark theme). In a game, the moon/sun button
 at the top switches between light and dark mode.
 
@@ -27,7 +34,7 @@ URL options:
 | Parameter | Effect |
 | --- | --- |
 | `?seed=abc` | Skip the title and play that exact game (same seed + same moves = same game) |
-| `&map=campus` | Pick the map (`florida-region`, `coast-to-coast`, `campus`) |
+| `&map=campus` | Pick the map by its id in `data/maps.js` (works for locked maps too) |
 | `&mode=zen` | Pick the mode (`classic`, `zen`, `daily`) |
 | `?debug` | Open the debug panel at start |
 
@@ -54,6 +61,14 @@ same network. Or open the deployed site (below).
 - Drag equipment from the tray at the bottom onto the map (or tap it, then
   tap where it goes). Hover over a tool (or press it on a phone) to see what
   it does.
+- Bumping into water, a park or hills while drawing flashes that square
+  red. Each kind has its own texture (waves, dots, hatching).
+- When a site is almost full its ring glows and a warning sounds. If it's
+  off screen or under the toolbar, an arrow at the edge points to it.
+- Your first game from the title screen shows three quick tips at the top
+  (Skip turns them off for good).
+- After a game ends, "Same seed" replays exactly that game. The title
+  screen shows your best score on each map.
 - Space pauses, 1 and 2 set the speed, M mutes, Escape opens the menu.
 
 ## Build and test
@@ -101,7 +116,14 @@ Every field is commented in the file. The ones that matter most:
 | `growth.viewStart`, `growth.viewPerSite`, `growth.viewPadding` | How much of the map is open at the start, how much each new site opens up, and the room kept around every site |
 | `grid.cellSize` | Size of one grid square; smaller squares mean finer routes and more links per connection |
 | `links.bandwidth`, `links.packetSpeed` | How much a link carries and how fast packets move |
-| `inventory` | Starting equipment (upgrades, switches, firewalls, SD-WAN, leased lines) |
+| `inventory` | Starting equipment (upgrades, switches, firewalls, SD-WAN, leased lines, core routers, QoS policies, backbones) |
+| `switches.forwardRate`, `switches.crowdPenalty`, `switches.coreForwardRate` | How many packets a switch forwards per second, how much each extra link slows it, and how fast a core router is |
+| `qos.priorityCost`, `qos.otherCost` | How much faster calls and payments get through a switch with a QoS policy, and how much slower everything else gets |
+| `districts.chance`, `districts.radius` | How often new warehouses and shops appear near their district hub, and how near |
+| `backbone.speed` | How many times faster packets move along a backbone |
+| `hunger.*` | How patient district hubs are before they need deliveries |
+| `siteGrowth.*` | How many deliveries make a site grow, and how much bigger and busier it gets |
+| `rewards.weekly` | What arrives at the end of every week before you pick a reward |
 | `spawn.packetIntervalScale` | Global traffic rate: lower is busier |
 | `spawn.warmupDays`, `spawn.warmupScale` | The calm start: traffic begins this many times sparser and eases to normal over these days |
 | `spawn.newSiteGrace` | Seconds a new site waits before sending, so you can connect it |
@@ -132,7 +154,13 @@ validator, which names the exact field that's wrong.
   that links must go around: `{ kind, points: [[x, y], …] }`; kinds are in
   `data/terrain.js`, colours in `data/theme.js`) and optional `tuning`
   (config overrides for this map only, e.g. `{ links: { startingCount: 50 } }`).
-  It shows up on the title screen and in the daily rotation.
+  Terrain can have `holes` (islands in a sea). A map can also change events
+  (`events: { backhoe: { schedule: … } }`, or `false` to turn one off), when
+  site types unlock (`siteUnlock: { warehouse: 0 }`) and its goal
+  (`goalDays`). A map can have more than one data center. Maps unlock in the
+  order they're listed. It shows up on the title screen and in the daily
+  rotation. Add its id to the `nn_scores` map check with a new migration in
+  `supabase/migrations/` so it gets an online leaderboard.
 - **A traffic type:** add it to `TRAFFIC_TYPES` in `data/traffic.js`
   (colour, shape, size, destination `to`, points, `unlockDay`, `hours`),
   then give it a weight in the `traffic` of the site types that send it in
@@ -174,7 +202,7 @@ days and saves a WebP). It goes in `sturrupmichael-web.github.io` at
 
 ```json
 {
-  "title": "Mini Network",
+  "title": "Nano Networks",
   "slug": "mini-network",
   "description": "Keep a growing company online: draw links between offices, warehouses and shops, add switches and firewalls, and survive cut cables, patch days and a DDoS before a site's queue overflows.",
   "url": "https://michaelsturrup.com/mini-network/",

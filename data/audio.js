@@ -15,6 +15,13 @@
  *     decay        Seconds for a note to fade out.
  *   trafficSteps   Scale step per traffic type id (missing types use 0).
  *   cues           Short sounds for moments: { freq (Hz), volume, decay }.
+ *   spawn          A new site: a soft two-note chime, a step of the scale and
+ *                  the note above it. { steps, gap (s), volume, decay }
+ *   tick           Drawing a link: one tiny click per square, rising a step
+ *                  every few squares so a long run climbs. { freq (Hz),
+ *                  volume, decay, rise (semitones per square), maxRise,
+ *                  spacing (s between ticks when several land at once),
+ *                  undo (freq of the lower click when a square is taken back) }
  */
 export const AUDIO = {
   masterVolume: 0.7,
@@ -43,5 +50,8 @@ export const AUDIO = {
     drop: { freq: 155, volume: 0.06, decay: 0.4 },
     outage: { freq: 98, volume: 0.14, decay: 2.5 },
     reward: { freq: 523, volume: 0.08, decay: 1.2 },
+    warning: { freq: 330, volume: 0.09, decay: 0.5 },
   },
+  spawn: { steps: [2, 4], gap: 0.09, volume: 0.06, decay: 0.7 },
+  tick: { freq: 1320, volume: 0.035, decay: 0.045, rise: 0.5, maxRise: 12, spacing: 0.028, undo: 990 },
 };
