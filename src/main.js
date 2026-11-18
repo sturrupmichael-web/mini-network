@@ -2,6 +2,7 @@
  * Entry point: checks the data, then starts the game (title screen, or
  * straight into a game when the URL has ?seed=).
  */
+import { joinSiteLive } from "./site-live.js";
 import { GAME_DATA } from "../data/index.js";
 import { validateData } from "./data/validate.js";
 import { EFFECT_NAMES } from "./sim/events.js";
@@ -35,3 +36,5 @@ const game = startGame({
   debug: params.has("debug"),
 });
 window.miniNetwork = game;
+
+joinSiteLive("mini-network"); // live "N playing" + visit counter on michaelsturrup.com

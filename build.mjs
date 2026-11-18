@@ -26,7 +26,7 @@ const CSP = (scriptHashes) =>
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self' https://abeqdmurddrkrqbnfylb.supabase.co",
+    "connect-src 'self' https://abeqdmurddrkrqbnfylb.supabase.co wss://abeqdmurddrkrqbnfylb.supabase.co",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
