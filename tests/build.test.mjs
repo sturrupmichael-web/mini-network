@@ -38,7 +38,9 @@ export const tests = [
   ["no absolute paths or other sites in the output", async () => {
     const { html } = await build({ write: false });
     assert.doesNotMatch(html, /\b(src|href)="\//);
-    assert.doesNotMatch(html, /https?:\/\/(?!www\.w3\.org)/, "loads nothing from other sites");
+    // The one other site is the shared Supabase project behind the site's live player /
+    // visit counter (src/site-live.js).
+    assert.doesNotMatch(html, /https?:\/\/(?!www\.w3\.org|abeqdmurddrkrqbnfylb\.supabase\.co)/, "loads nothing from other sites");
   }],
   ["build fails if dev.html references a file that wasn't inlined", async () => {
     const broken = devHtml.replace("</body>", '<img src="images/logo.png" alt=""></body>');
